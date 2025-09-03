@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
-from backend.config.database import SupabaseClient
+from backend.db.supabase_client import DatabaseClient
 import json
 
 
@@ -18,7 +18,7 @@ class AgentMemory:
         self.agent_id = agent_id
         self.tenant_id = tenant_id
         self.max_short_term_messages = max_short_term_messages
-        self.db_client = SupabaseClient(tenant_id=tenant_id)
+        self.db_client = DatabaseClient(tenant_id=tenant_id)
         
         # Short-term memory (in-memory storage)
         self.short_term: List[Dict[str, Any]] = []

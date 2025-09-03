@@ -8,7 +8,7 @@ from agents.orchestrator.models import (
     Schedule, TargetAudience, CreativeBrief, Materials,
     OptimizationStrategy, CampaignObjective
 )
-from backend.config.database import SupabaseClient
+from backend.db.supabase_client import DatabaseClient
 import uuid
 import json
 
@@ -18,7 +18,7 @@ class OrchestratorAgent(BaseAgent):
     
     def __init__(self, config: AgentConfig):
         super().__init__(config)
-        self.db_client = SupabaseClient(tenant_id=config.tenant_id)
+        self.db_client = DatabaseClient(tenant_id=config.tenant_id)
         
     def _initialize_tools(self) -> List[Any]:
         """Initialize orchestrator-specific tools"""

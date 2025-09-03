@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 from backend.db.models.initiative import Initiative
-from backend.config.database import SupabaseClient, get_supabase_client
+from backend.db.supabase_client import DatabaseClient, get_database_client
 from backend.api.middleware.auth import verify_token
 from backend.api.middleware.tenant import get_tenant_id
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("/", response_model=List[Initiative])
 async def list_initiatives(
     tenant_id: str = Depends(get_tenant_id),
-    db: SupabaseClient = Depends(lambda: get_supabase_client(tenant_id))
+    db: DatabaseClient = Depends(lambda: get_database_client(tenant_id))
 ):
     """List all initiatives for a tenant"""
     initiatives = await db.select("initiatives")
@@ -22,7 +22,7 @@ async def list_initiatives(
 async def get_initiative(
     initiative_id: str,
     tenant_id: str = Depends(get_tenant_id),
-    db: SupabaseClient = Depends(lambda: get_supabase_client(tenant_id))
+    db: DatabaseClient = Depends(lambda: get_database_client(tenant_id))
 ):
     """Get a specific initiative"""
     initiatives = await db.select(
@@ -39,7 +39,7 @@ async def get_initiative(
 async def create_initiative(
     initiative: Initiative,
     tenant_id: str = Depends(get_tenant_id),
-    db: SupabaseClient = Depends(lambda: get_supabase_client(tenant_id))
+    db: DatabaseClient = Depends(lambda: get_database_client(tenant_id))
 ):
     """Create a new initiative"""
     initiative.tenant_id = tenant_id
@@ -51,7 +51,7 @@ async def update_initiative(
     initiative_id: str,
     initiative: Initiative,
     tenant_id: str = Depends(get_tenant_id),
-    db: SupabaseClient = Depends(lambda: get_supabase_client(tenant_id))
+    db: DatabaseClient = Depends(lambda: get_database_client(tenant_id))
 ):
     """Update an initiative"""
     result = await db.update(

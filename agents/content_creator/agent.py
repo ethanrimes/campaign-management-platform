@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from agents.base.agent import BaseAgent, AgentConfig, AgentOutput
-from backend.config.database import SupabaseClient
+from backend.db.supabase_client import DatabaseClient
 import json
 import uuid
 import random
@@ -14,7 +14,7 @@ class ContentCreatorAgent(BaseAgent):
     
     def __init__(self, config: AgentConfig):
         super().__init__(config)
-        self.db_client = SupabaseClient(tenant_id=config.tenant_id)
+        self.db_client = DatabaseClient(tenant_id=config.tenant_id)
         
     def _initialize_tools(self) -> List[Any]:
         """Initialize content creation tools"""

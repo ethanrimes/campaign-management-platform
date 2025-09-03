@@ -6,7 +6,7 @@ from agents.base.agent import BaseAgent, AgentConfig, AgentOutput
 from tools.search.perplexity_search import PerplexitySearch
 from tools.search.facebook_search import FacebookSearch
 from tools.search.instagram_search import InstagramSearch
-from backend.config.database import SupabaseClient
+from backend.db.supabase_client import DatabaseClient
 import json
 import uuid
 
@@ -15,14 +15,17 @@ class ResearchAgent(BaseAgent):
     """Research agent for gathering insights and competitive intelligence"""
     
     def __init__(self, config: AgentConfig):
-        super().__init__(config)
-        self.db_client = SupabaseClient(tenant_id=config.tenant_id)
+        # Initialize search tools BEFORE calling super().__init__()
         self.perplexity = PerplexitySearch()
         self.facebook = FacebookSearch()
         self.instagram = InstagramSearch()
         
+        super().__init__(config)
+        self.db_client = DatabaseClient(tenant_id=config.tenant_id)
+        
     def _initialize_tools(self) -> List[Any]:
         """Initialize research-specific tools"""
+        # Now we can safely reference the tools
         return [
             self.perplexity,
             self.facebook,

@@ -2,7 +2,7 @@
 
 import asyncio
 from typing import List
-from backend.config.database import SupabaseClient
+from backend.db.supabase_client import DatabaseClient
 from agents.orchestrator.agent import OrchestratorAgent, AgentConfig
 import logging
 
@@ -15,7 +15,7 @@ async def run_orchestrator_job():
     
     try:
         # Get all active initiatives
-        db = SupabaseClient()
+        db = DatabaseClient()
         initiatives = await db.select(
             "initiatives",
             filters={"is_active": True}

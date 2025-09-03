@@ -13,6 +13,10 @@ import os
 from datetime import datetime, timedelta
 import uuid
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,9 +28,8 @@ from agents.base.agent import AgentConfig
 
 
 # Test configurations
-TEST_TENANT_ID = str(uuid.uuid4())
-TEST_INITIATIVE_ID = str(uuid.uuid4())
-
+TEST_TENANT_ID = "9c7ff6ae-5f41-40bf-97a9-c56f337c3186"
+TEST_INITIATIVE_ID = "ce2ea2b3-ae0e-4082-9d5a-43c645912b04"
 
 async def test_orchestrator():
     """Test the Orchestrator Agent"""
