@@ -1,0 +1,82 @@
+# initiatives/penn_education/config.yaml
+
+name: "Penn Education Initiative"
+description: "Educational content and engagement for University of Pennsylvania community"
+
+# Model Configuration
+model_provider: "openai"
+
+# Social Media Accounts
+social_accounts:
+  facebook:
+    page_id: "penn_education_fb"
+    page_name: "Penn Education Hub"
+    page_url: "https://facebook.com/penneducation"
+  instagram:
+    username: "penn_education"
+    account_id: "penn_education_ig"
+    url: "https://instagram.com/penn_education"
+
+# Business Configuration
+category: "Education"
+optimization_metric: "engagement"
+
+# Objectives and KPIs
+objectives:
+  primary: "Build engaged Penn community online"
+  secondary:
+    - "Share educational resources"
+    - "Highlight student achievements"
+    - "Promote campus events"
+  
+target_metrics:
+  reach: 25000
+  engagement_rate: 0.08
+  clicks: 1000
+  event_registrations: 200
+
+# Budget Configuration
+budget:
+  daily:
+    amount: 150
+    currency: "USD"
+  total:
+    amount: 4500
+    currency: "USD"
+
+# Content Strategy
+content_strategy:
+  post_frequency: 7  # posts per week
+  post_types:
+    - "image"
+    - "video"
+    - "carousel"
+    - "story"
+  tone: "educational"
+  themes:
+    - "Academic excellence"
+    - "Student life"
+    - "Research highlights"
+    - "Alumni success stories"
+    - "Campus events"
+
+# Target Audience
+target_audience:
+  age_range: [17, 30]
+  locations:
+    - "Philadelphia, PA"
+    - "Pennsylvania"
+    - "United States"
+  interests:
+    - "University of Pennsylvania"
+    - "Higher Education"
+    - "Ivy League"
+    - "Academic Research"
+    - "Student Life"
+  languages:
+    - "English"
+
+# Custom Prompts
+custom_prompts:
+  tone_override: "Maintain an inspiring, educational tone that reflects Penn's academic excellence"
+  content_guidelines: "Include Penn-specific references, traditions, and values"

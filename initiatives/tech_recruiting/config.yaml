@@ -1,0 +1,84 @@
+# initiatives/tech_recruiting/config.yaml
+
+name: "Tech Talent Recruiting"
+description: "Attract top software engineering talent through strategic social media presence"
+
+# Model Configuration
+model_provider: "grok"  # Using Grok for tech-focused content
+
+# Social Media Accounts
+social_accounts:
+  facebook:
+    page_id: "tech_recruiting_fb"
+    page_name: "Tech Career Hub"
+    page_url: "https://facebook.com/techcareerhub"
+  instagram:
+    username: "tech_careers"
+    account_id: "tech_careers_ig"
+    url: "https://instagram.com/tech_careers"
+
+# Business Configuration
+category: "Career/Recruiting"
+optimization_metric: "conversions"
+
+# Objectives and KPIs
+objectives:
+  primary: "Generate qualified job applications"
+  secondary:
+    - "Build employer brand"
+    - "Showcase company culture"
+    - "Highlight tech stack and projects"
+  
+target_metrics:
+  reach: 50000
+  engagement_rate: 0.06
+  clicks: 2000
+  applications: 100
+
+# Budget Configuration
+budget:
+  daily:
+    amount: 200
+    currency: "USD"
+  total:
+    amount: 6000
+    currency: "USD"
+
+# Content Strategy
+content_strategy:
+  post_frequency: 10  # posts per week
+  post_types:
+    - "image"
+    - "video"
+    - "carousel"
+  tone: "professional"
+  themes:
+    - "Engineering culture"
+    - "Tech stack highlights"
+    - "Employee testimonials"
+    - "Career growth opportunities"
+    - "Open positions"
+    - "Tech tips and tutorials"
+
+# Target Audience
+target_audience:
+  age_range: [22, 40]
+  locations:
+    - "San Francisco Bay Area"
+    - "New York"
+    - "Seattle"
+    - "Austin"
+  interests:
+    - "Software Engineering"
+    - "Programming"
+    - "Technology"
+    - "Career Development"
+    - "Startups"
+    - "Tech Companies"
+  languages:
+    - "English"
+
+# Custom Prompts
+custom_prompts:
+  tone_override: "Professional yet approachable, emphasizing innovation and growth"
+  content_guidelines: "Focus on technical excellence, work-life balance, and career opportunities"

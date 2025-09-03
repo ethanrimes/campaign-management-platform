@@ -1,0 +1,77 @@
+# initiatives/template.yaml
+
+# Initiative Configuration Template
+name: "Initiative Name"
+description: "Brief description of the initiative"
+
+# Model Configuration
+model_provider: "openai"  # Options: openai, grok, gemini, anthropic
+
+# Social Media Accounts
+social_accounts:
+  facebook:
+    page_id: ""
+    page_name: ""
+    page_url: ""
+  instagram:
+    username: ""
+    account_id: ""
+    url: ""
+
+# Business Configuration
+category: "Education"  # Education, Nonprofit, Business, etc.
+optimization_metric: "engagement"  # reach, engagement, traffic, conversions
+
+# Objectives and KPIs
+objectives:
+  primary: "Increase brand awareness"
+  secondary:
+    - "Drive website traffic"
+    - "Build community engagement"
+  
+target_metrics:
+  reach: 10000
+  engagement_rate: 0.05
+  clicks: 500
+  conversions: 50
+
+# Budget Configuration
+budget:
+  daily:
+    amount: 100
+    currency: "USD"
+  total:
+    amount: 3000
+    currency: "USD"
+
+# Content Strategy
+content_strategy:
+  post_frequency: 5  # posts per week
+  post_types:
+    - "image"
+    - "video"
+    - "carousel"
+  tone: "professional"  # professional, casual, friendly, educational
+  themes:
+    - "Educational content"
+    - "Community highlights"
+    - "Industry insights"
+
+# Target Audience
+target_audience:
+  age_range: [18, 65]
+  locations:
+    - "United States"
+    - "Canada"
+  interests:
+    - "Education"
+    - "Technology"
+    - "Career Development"
+  languages:
+    - "English"
+
+# Custom Prompts (Optional)
+custom_prompts:
+  tone_override: ""
+  content_guidelines: ""
+  hashtag_strategy: ""

@@ -1,0 +1,43 @@
+# Core dependencies
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+python-dotenv
+
+# Database
+supabase
+psycopg2-binary
+
+# AI/ML
+langchain
+langchain-openai
+openai
+
+# Social Media APIs
+facebook-sdk
+python-instagram
+
+# Search and Analytics
+requests
+httpx
+
+# Content Generation
+Pillow
+moviepy
+
+# Utilities
+pyyaml
+croniter
+apscheduler
+tenacity
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+
+# Development
+black
+flake8
+mypy
