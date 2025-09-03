@@ -14,10 +14,10 @@ class BaseChain(ABC):
     def __init__(
         self,
         model_provider: str = "openai",
-        model_config: Optional[Dict[str, Any]] = None
+        llm_config: Optional[Dict[str, Any]] = None
     ):
         self.model_provider = model_provider
-        self.model_config = model_config or {}
+        self.llm_config = llm_config or {}
         self.client = self._initialize_client()
         
     def _initialize_client(self) -> OpenAI:
@@ -29,8 +29,8 @@ class BaseChain(ABC):
         config = provider_configs.get(self.model_provider, provider_configs["openai"])
         
         # Override with any provided config
-        if self.model_config:
-            for key, value in self.model_config.items():
+        if self.llm_config:
+            for key, value in self.llm_config.items():
                 setattr(config, key, value)
         
         # Get API key

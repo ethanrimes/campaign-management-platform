@@ -34,4 +34,4 @@ class Research(BaseModel):
     expires_at: Optional[datetime] = None  # When research becomes stale
     
     class Config:
-        orm_mode = True
+        from_attributes = True

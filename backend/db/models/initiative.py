@@ -33,7 +33,7 @@ class Initiative(BaseModel):
     
     # Model Configuration
     model_provider: str = "openai"  # openai, grok, gemini, anthropic
-    model_config: Optional[Dict[str, Any]] = None  # Model-specific settings
+    llm_config: Optional[Dict[str, Any]] = None  # Model-specific settings (renamed from model_config)
     
     # Metrics Goals
     optimization_metric: Optional[str] = None  # reach, engagement, conversions
@@ -48,4 +48,4 @@ class Initiative(BaseModel):
     settings: Optional[Dict[str, Any]] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True

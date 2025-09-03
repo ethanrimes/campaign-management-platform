@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS initiatives (
     
     -- Model Configuration
     model_provider VARCHAR(50) DEFAULT 'openai',
-    model_config JSONB,
+    llm_config JSONB,
     
     -- Metrics Goals
     optimization_metric VARCHAR(50),

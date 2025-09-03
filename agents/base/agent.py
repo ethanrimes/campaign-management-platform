@@ -18,7 +18,7 @@ class AgentConfig(BaseModel):
     tenant_id: str
     initiative_id: str
     model_provider: str = "openai"
-    model_config: Optional[ModelConfig] = None
+    llm_config: Optional[ModelConfig] = None
     verbose: bool = False
     
     class Config:
@@ -48,7 +48,7 @@ class BaseAgent(ABC):
     def _initialize_client(self) -> OpenAI:
         """Initialize OpenAI client with appropriate configuration"""
         # Load initiative config to get model settings
-        model_config = self.config.model_config or self._load_model_config()
+        model_config = self.config.llm_config or self._load_model_config()
         
         # Get API key from environment
         api_key = os.getenv(model_config.api_key_env)
@@ -145,7 +145,7 @@ class BaseAgent(ABC):
         messages.append({"role": "user", "content": user_message})
         
         # Get model config
-        model_config = self.config.model_config or self._load_model_config()
+        model_config = self.config.llm_config or self._load_model_config()
         
         # Call OpenAI API
         response = self.client.chat.completions.create(

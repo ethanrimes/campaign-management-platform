@@ -108,7 +108,7 @@ class OrchestratorAgent(BaseAgent):
         
         # Get model config
         from backend.config.settings import settings
-        model_config = self.config.model_config or self._load_model_config()
+        model_config = self.config.llm_config or self._load_model_config()
         
         # Call OpenAI API for campaign planning
         response = self.client.chat.completions.create(

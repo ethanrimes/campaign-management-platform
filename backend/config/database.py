@@ -30,10 +30,10 @@ class SupabaseClient:
         
         # Set RLS context for tenant
         if self.tenant_id:
-            client.auth.set_session({
-                "access_token": self._generate_tenant_token(),
-                "refresh_token": ""
-            })
+            client.auth.set_session(
+                access_token=self._generate_tenant_token(),
+                refresh_token=self._generate_tenant_token()  # Using same token for now
+            )
         
         return client
     
@@ -58,8 +58,14 @@ class SupabaseClient:
         if self.tenant_id:
             data["tenant_id"] = self.tenant_id
         
-        result = self.client.table(table_name).insert(data).execute()
-        return result.data[0] if result.data else None
+        try:
+            result = self.client.table(table_name).insert(data).execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            else:
+                raise Exception(f"Insert operation returned no data. This may indicate a database constraint violation or connection issue.")
+        except Exception as e:
+            raise Exception(f"Database insert failed for table '{table_name}': {str(e)}")
     
     async def select(
         self, 
@@ -93,8 +99,14 @@ class SupabaseClient:
         for key, value in filters.items():
             query = query.eq(key, value)
         
-        result = query.update(data).execute()
-        return result.data[0] if result.data else None
+        try:
+            result = query.update(data).execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            else:
+                return None
+        except Exception as e:
+            raise Exception(f"Database update failed for table '{table_name}': {str(e)}")
     
     async def delete(
         self,

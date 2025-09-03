@@ -51,4 +51,4 @@ class AdSet(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:
-        orm_mode = True
+        from_attributes = True
