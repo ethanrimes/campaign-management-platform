@@ -318,7 +318,7 @@ class InitiativeCreator:
         }
         
         with open(creds_file, 'w') as f:
-            json.dumps(credentials, f, indent=2)
+            json.dump(credentials, f, indent=2)
         
         return creds_file
     

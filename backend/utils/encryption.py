@@ -4,7 +4,7 @@ import os
 import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from typing import Optional
 
 class TokenEncryption:
@@ -27,8 +27,8 @@ class TokenEncryption:
         
         # If key is a simple string, derive a proper key from it
         if len(key) < 44:  # Fernet keys are 44 chars when base64 encoded
-            # Use PBKDF2 to derive a key from the password
-            kdf = PBKDF2(
+            # Use PBKDF2HMAC to derive a key from the password
+            kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
                 salt=b'stable_salt_v1',  # Using stable salt for consistency

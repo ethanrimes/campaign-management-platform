@@ -19,6 +19,7 @@ from psycopg2.extras import RealDictCursor
 import logging
 from dotenv import load_dotenv
 import hashlib
+import re
 
 # Load environment variables
 load_dotenv()
@@ -114,9 +115,53 @@ class MigrationRunner:
                     return result['checksum'] == new_checksum
         return True  # If no checksum stored, assume it's ok
     
+    def split_sql_statements(self, sql_content: str) -> list:
+        """
+        Split SQL content into individual statements.
+        This handles DO $$ blocks and other multi-line statements properly.
+        """
+        # Remove comments
+        sql_content = re.sub(r'--.*$', '', sql_content, flags=re.MULTILINE)
+        
+        # Split by semicolon, but not within DO blocks or strings
+        statements = []
+        current_statement = []
+        in_do_block = False
+        in_string = False
+        escape_next = False
+        
+        for line in sql_content.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Track DO blocks
+            if 'DO $$' in line:
+                in_do_block = True
+            elif '$$;' in line and in_do_block:
+                in_do_block = False
+                current_statement.append(line)
+                statements.append('\n'.join(current_statement))
+                current_statement = []
+                continue
+            
+            # For regular statements
+            if not in_do_block and line.endswith(';'):
+                current_statement.append(line)
+                statements.append('\n'.join(current_statement))
+                current_statement = []
+            else:
+                current_statement.append(line)
+        
+        # Add any remaining statement
+        if current_statement:
+            statements.append('\n'.join(current_statement))
+        
+        return [s.strip() for s in statements if s.strip()]
+    
     def run_migration(self, migration_file: Path) -> bool:
         """
-        Run a single migration file
+        Run a single migration file statement by statement
         
         Args:
             migration_file: Path to the migration SQL file
@@ -139,10 +184,9 @@ class MigrationRunner:
         # Check if already applied
         applied_migrations = self.get_applied_migrations()
         if version in applied_migrations:
-            # Migration already applied, check if content changed
             if not self.check_migration_checksum(version, checksum):
                 logger.warning(f"  ⚠️  {version} already applied but content has changed")
-                logger.info("     Skipping (migrations should be immutable)")
+                logger.info("     Consider creating a new migration file for changes")
             else:
                 logger.info(f"  ✓ {version} already applied - skipping")
             return True
@@ -150,22 +194,70 @@ class MigrationRunner:
         logger.info(f"\nRunning migration: {version}")
         
         start_time = datetime.now()
+        errors_encountered = []
+        statements_applied = 0
+        statements_skipped = 0
         
-        # Execute migration
+        # Split into individual statements and run each
+        statements = self.split_sql_statements(sql_content)
+        total_statements = len(statements)
+        
         with self.get_connection() as conn:
-            conn.autocommit = False
-            try:
+            for i, statement in enumerate(statements, 1):
+                if not statement.strip():
+                    continue
+                    
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(statement)
+                        conn.commit()
+                        statements_applied += 1
+                        
+                except psycopg2.errors.DuplicateTable as e:
+                    conn.rollback()
+                    statements_skipped += 1
+                    logger.debug(f"    Table already exists (statement {i}/{total_statements})")
+                    
+                except psycopg2.errors.DuplicateObject as e:
+                    conn.rollback()
+                    statements_skipped += 1
+                    logger.debug(f"    Object already exists (statement {i}/{total_statements})")
+                    
+                except psycopg2.errors.DuplicateColumn as e:
+                    conn.rollback()
+                    statements_skipped += 1
+                    logger.debug(f"    Column already exists (statement {i}/{total_statements})")
+                    
+                except psycopg2.errors.UniqueViolation as e:
+                    conn.rollback()
+                    statements_skipped += 1
+                    logger.debug(f"    Constraint already exists (statement {i}/{total_statements})")
+                    
+                except Exception as e:
+                    conn.rollback()
+                    error_msg = str(e)
+                    
+                    # Check if it's an ignorable error
+                    if any(phrase in error_msg.lower() for phrase in [
+                        "already exists", "duplicate", "multiple primary keys"
+                    ]):
+                        statements_skipped += 1
+                        logger.debug(f"    Skipping (statement {i}/{total_statements}): {error_msg[:100]}")
+                    else:
+                        errors_encountered.append(f"Statement {i}: {error_msg}")
+                        logger.error(f"    ✗ Error in statement {i}/{total_statements}: {error_msg}")
+            
+            # Calculate execution time
+            execution_time = int(
+                (datetime.now() - start_time).total_seconds() * 1000
+            )
+            
+            # Determine if migration was successful
+            success = len(errors_encountered) == 0 and (statements_applied > 0 or statements_skipped > 0)
+            
+            if success:
+                # Record successful migration
                 with conn.cursor() as cur:
-                    # Run the migration SQL
-                    cur.execute(sql_content)
-                    
-                    # Calculate execution time
-                    execution_time = int(
-                        (datetime.now() - start_time).total_seconds() * 1000
-                    )
-                    
-                    # Record successful migration
-                    # Use INSERT ... ON CONFLICT to handle race conditions
                     cur.execute("""
                         INSERT INTO schema_migrations 
                         (version, checksum, execution_time_ms, success)
@@ -176,61 +268,22 @@ class MigrationRunner:
                             execution_time_ms = EXCLUDED.execution_time_ms,
                             success = true,
                             applied_at = CURRENT_TIMESTAMP
-                        WHERE schema_migrations.success = false
                     """, (version, checksum, execution_time))
                     
                     # Notify PostgREST to reload schema
                     cur.execute("NOTIFY pgrst, 'reload schema';")
                 
                 conn.commit()
-                logger.info(f"  ✓ {version} applied successfully ({execution_time}ms)")
+                
+                logger.info(f"  ✓ {version} completed successfully")
+                logger.info(f"    Applied: {statements_applied} statements, Skipped: {statements_skipped} statements")
+                logger.info(f"    Time: {execution_time}ms")
                 return True
-                
-            except psycopg2.errors.UniqueViolation:
-                # Migration was already recorded (race condition)
-                conn.rollback()
-                logger.info(f"  ✓ {version} already recorded - skipping")
-                return True
-                
-            except Exception as e:
-                conn.rollback()
-                error_msg = str(e)
-                
-                # Check if it's just a "already exists" type error for idempotent operations
-                if any(phrase in error_msg.lower() for phrase in [
-                    "already exists", "duplicate", "constraint"
-                ]):
-                    logger.info(f"  ✓ {version} structures already exist - marking as applied")
-                    
-                    # Mark as successfully applied since the structures exist
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            INSERT INTO schema_migrations 
-                            (version, checksum, success)
-                            VALUES (%s, %s, true)
-                            ON CONFLICT (version) 
-                            DO UPDATE SET success = true
-                        """, (version, checksum))
-                    conn.commit()
-                    return True
-                else:
-                    logger.error(f"  ✗ {version} failed: {e}")
-                    
-                    # Record failed migration
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute("""
-                                INSERT INTO schema_migrations 
-                                (version, checksum, success)
-                                VALUES (%s, %s, false)
-                                ON CONFLICT (version) 
-                                DO UPDATE SET success = false
-                            """, (version, checksum))
-                        conn.commit()
-                    except:
-                        pass  # Ignore errors recording failure
-                    
-                    return False
+            else:
+                logger.error(f"  ✗ {version} failed with {len(errors_encountered)} errors")
+                for error in errors_encountered[:5]:  # Show first 5 errors
+                    logger.error(f"    - {error}")
+                return False
     
     def run_all_migrations(self):
         """Run all pending migrations"""
@@ -255,7 +308,6 @@ class MigrationRunner:
         # Run each migration
         success_count = 0
         failed_count = 0
-        skipped_count = 0
         
         for migration_file in pending:
             result = self.run_migration(migration_file)
@@ -263,24 +315,27 @@ class MigrationRunner:
                 success_count += 1
             else:
                 failed_count += 1
-                # For idempotent migrations, we continue even if one "fails"
-                # since it might just mean the structures already exist
-                logger.info("  Continuing with next migration...")
+                # Stop on first failure for safety
+                logger.error("Stopping migration process due to failure")
+                break
         
         # Summary
         logger.info("\n" + "="*60)
         if failed_count == 0:
             logger.info(f"✅ SUCCESS: {success_count} migration(s) completed")
         else:
-            logger.info(f"⚠️  COMPLETED: {success_count} successful, {failed_count} had issues")
-            logger.info("Review the log above for details.")
+            logger.error(f"⚠️  PARTIAL: {success_count} successful, {failed_count} failed")
+            logger.info("Fix the failed migration and run again.")
         logger.info("="*60)
         
-        # Return success even if some had issues, since migrations are idempotent
-        return True
+        return failed_count == 0
     
     def verify_schema(self):
-        """Verify that key tables exist after migration"""
+        """Verify that key tables and columns exist after migration"""
+        logger.info("\nVerifying schema...")
+        all_valid = True
+        
+        # Check tables
         tables_to_check = [
             'initiatives',
             'initiative_tokens',
@@ -291,9 +346,6 @@ class MigrationRunner:
             'research',
             'agent_memories'
         ]
-        
-        logger.info("\nVerifying schema...")
-        all_exist = True
         
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -311,7 +363,7 @@ class MigrationRunner:
                         logger.info(f"  ✓ Table '{table}' exists")
                     else:
                         logger.error(f"  ✗ Table '{table}' missing!")
-                        all_exist = False
+                        all_valid = False
         
         # Check for encrypted token columns
         with self.get_connection() as conn:
@@ -326,10 +378,31 @@ class MigrationRunner:
                 
                 if encrypted_cols:
                     logger.info(f"\n  ✓ Found {len(encrypted_cols)} encrypted token columns")
+                    for col in encrypted_cols:
+                        logger.debug(f"    - {col}")
                 else:
                     logger.warning("  ⚠️  No encrypted token columns found")
+                    all_valid = False
         
-        return all_exist
+        # Check for initiative_id in all dependent tables
+        tables_needing_initiative_id = ['ad_sets', 'posts', 'metrics', 'agent_memories']
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                for table in tables_needing_initiative_id:
+                    cur.execute("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = %s 
+                        AND column_name = 'initiative_id'
+                    """, (table,))
+                    
+                    if cur.fetchone():
+                        logger.info(f"  ✓ Table '{table}' has initiative_id column")
+                    else:
+                        logger.error(f"  ✗ Table '{table}' missing initiative_id column!")
+                        all_valid = False
+        
+        return all_valid
 
 
 async def main():
@@ -345,18 +418,19 @@ async def main():
             schema_valid = runner.verify_schema()
             
             if schema_valid:
-                logger.info("\n✅ All migrations completed successfully!")
-                logger.info("\nYour database is ready for encrypted token storage.")
+                logger.info("\n✅ All migrations completed and schema verified!")
+                logger.info("\nYour database is ready for use.")
                 logger.info("\nNext steps:")
                 logger.info("1. Ensure ENCRYPTION_KEY is set in your .env file")
                 logger.info("2. Run scripts/setup/create_initiative.py to create an initiative")
             else:
-                logger.warning("\n⚠️  Some tables are missing. Review the schema.")
+                logger.warning("\n⚠️  Schema validation found issues. Review the output above.")
         else:
-            logger.error("\n❌ Migration process encountered issues.")
+            logger.error("\n✗ Migration process failed. Please fix errors and run again.")
+            sys.exit(1)
             
     except Exception as e:
-        logger.error(f"\n❌ Migration runner failed: {e}")
+        logger.error(f"\n✗ Migration runner failed: {e}")
         sys.exit(1)
 
 
