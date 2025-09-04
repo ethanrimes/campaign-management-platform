@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import List, Optional
 from backend.db.models.campaign import Campaign
 from backend.db.supabase_client import DatabaseClient, get_database_client
-from backend.api.middleware.tenant import get_tenant_id
+from backend.api.middleware.initiative import get_tenant_id
 from agents.orchestrator.agent import OrchestratorAgent, AgentConfig
 
 router = APIRouter()
@@ -36,7 +36,6 @@ async def orchestrate_campaigns(
     config = AgentConfig(
         name="Campaign Orchestrator",
         description="Plans and manages campaigns",
-        tenant_id=tenant_id,
         initiative_id=initiative_id
     )
     

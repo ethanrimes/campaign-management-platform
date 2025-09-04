@@ -15,8 +15,7 @@ class AgentConfig(BaseModel):
     """Base configuration for all agents"""
     name: str
     description: str
-    tenant_id: str
-    initiative_id: str
+    initiative_id: str  # Only use initiative_id
     model_provider: str = "openai"
     llm_config: Optional[ModelConfig] = None
     verbose: bool = False

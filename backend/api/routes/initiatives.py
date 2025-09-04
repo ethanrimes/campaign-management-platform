@@ -5,7 +5,7 @@ from typing import List, Optional
 from backend.db.models.initiative import Initiative
 from backend.db.supabase_client import DatabaseClient, get_database_client
 from backend.api.middleware.auth import verify_token
-from backend.api.middleware.tenant import get_tenant_id
+from backend.api.middleware.initiative import get_tenant_id
 
 router = APIRouter()
 

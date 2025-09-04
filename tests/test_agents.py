@@ -34,7 +34,6 @@ class TestOrchestratorAgent:
         return AgentConfig(
             name="Test Orchestrator",
             description="Test orchestrator agent",
-            tenant_id=str(uuid.uuid4()),
             initiative_id=str(uuid.uuid4()),
             model_provider="openai",
             verbose=True
@@ -186,7 +185,6 @@ class TestResearchAgent:
         return AgentConfig(
             name="Test Researcher",
             description="Test research agent",
-            tenant_id=str(uuid.uuid4()),
             initiative_id=str(uuid.uuid4()),
             model_provider="openai"
         )
@@ -289,7 +287,6 @@ class TestContentCreatorAgent:
         return AgentConfig(
             name="Test Content Creator",
             description="Test content creation agent",
-            tenant_id=str(uuid.uuid4()),
             initiative_id=str(uuid.uuid4()),
             model_provider="openai"
         )
@@ -405,7 +402,6 @@ class TestIntegration:
             research_config = AgentConfig(
                 name="Researcher",
                 description="Research agent",
-                tenant_id=tenant_id,
                 initiative_id=initiative_id,
                 model_provider="openai"
             )
@@ -414,7 +410,6 @@ class TestIntegration:
             orchestrator_config = AgentConfig(
                 name="Orchestrator",
                 description="Campaign orchestrator",
-                tenant_id=tenant_id,
                 initiative_id=initiative_id,
                 model_provider="openai"
             )
@@ -423,7 +418,6 @@ class TestIntegration:
             content_config = AgentConfig(
                 name="Content Creator",
                 description="Content generation",
-                tenant_id=tenant_id,
                 initiative_id=initiative_id,
                 model_provider="openai"
             )

@@ -13,7 +13,7 @@ load_dotenv()
 # Import routers
 from backend.api.routes import initiatives, campaigns, content, metrics
 from backend.api.middleware.auth import verify_token
-from backend.api.middleware.tenant import get_tenant_id
+from backend.api.middleware.initiative import get_tenant_id
 from backend.config.settings import settings
 
 # Lifespan context manager for startup/shutdown

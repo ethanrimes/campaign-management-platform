@@ -40,7 +40,6 @@ async def test_orchestrator():
     config = AgentConfig(
         name="Test Orchestrator",
         description="Campaign planning and budget allocation",
-        tenant_id=TEST_TENANT_ID,
         initiative_id=TEST_INITIATIVE_ID,
         model_provider="openai",
         verbose=True
@@ -97,7 +96,6 @@ async def test_researcher():
     config = AgentConfig(
         name="Test Researcher",
         description="Market research and competitive analysis",
-        tenant_id=TEST_TENANT_ID,
         initiative_id=TEST_INITIATIVE_ID,
         model_provider="openai"
     )
@@ -155,7 +153,6 @@ async def test_content_creator():
     config = AgentConfig(
         name="Test Content Creator",
         description="Content generation for social media",
-        tenant_id=TEST_TENANT_ID,
         initiative_id=TEST_INITIATIVE_ID,
         model_provider="openai"
     )

@@ -40,7 +40,6 @@ async def process_initiative_orchestration(initiative: dict):
         config = AgentConfig(
             name="Campaign Orchestrator",
             description="Plans and manages campaigns",
-            tenant_id=initiative["tenant_id"],
             initiative_id=initiative["id"],
             model_provider=initiative.get("model_provider", "openai")
         )

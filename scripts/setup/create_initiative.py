@@ -41,7 +41,6 @@ class InitiativeCreator:
     
     def __init__(self):
         self.encryption = TokenEncryption()
-        self.tenant_id = str(uuid.uuid4())
         self.initiative_id = str(uuid.uuid4())
         self.tokens = {}
         self.metadata = {}
@@ -250,7 +249,7 @@ class InitiativeCreator:
             # Prepare initiative data
             initiative_data = {
                 "id": self.initiative_id,
-                "tenant_id": self.tenant_id,
+                "tenant_id": self.initiative_id,
                 "name": basic_info['name'],
                 "description": basic_info.get('description', ''),
                 "category": basic_info.get('category'),
@@ -277,7 +276,7 @@ class InitiativeCreator:
             
             # Prepare token data
             token_data = {
-                "tenant_id": self.tenant_id,
+                "tenant_id": self.initiative_id,
                 "initiative_id": self.initiative_id,
                 **encrypted_tokens,
                 # Non-sensitive metadata
@@ -312,7 +311,6 @@ class InitiativeCreator:
         credentials = {
             "initiative_name": basic_info['name'],
             "initiative_id": self.initiative_id,
-            "tenant_id": self.tenant_id,
             "created_at": datetime.now().isoformat(),
             "note": "Use these IDs for API calls and agent operations"
         }

@@ -8,24 +8,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DatabaseClient:
-    """Enhanced Supabase client with initiative-based RLS support"""
+    """Supabase client with initiative-based RLS support"""
 
     def __init__(self, initiative_id: Optional[str] = None):
         self.initiative_id = initiative_id
-        # For backwards compatibility, tenant_id equals initiative_id
-        self.tenant_id = initiative_id  
+        # Remove the tenant_id confusion
         self.url = os.getenv("SUPABASE_URL")
         self.service_key = os.getenv("SUPABASE_SERVICE_KEY")
-
+        
         if not self.url or not self.service_key:
             raise ValueError("Supabase credentials not found in environment")
-
-        # Create the Supabase client
-        self.client = create_client(self.url, self.service_key)
         
-        # Set the initiative context for RLS
-        if self.initiative_id:
-            self._set_initiative_context()
+        self.client = create_client(self.url, self.service_key)
+
+    def _ensure_initiative_id(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure initiative_id is set in data"""
+        if self.initiative_id and "initiative_id" not in data:
+            data["initiative_id"] = self.initiative_id
+        return data
 
     def _set_initiative_context(self):
         """Set the initiative context for RLS policies"""
@@ -34,15 +34,6 @@ class DatabaseClient:
             # Note: This requires postgrest to pass through the header
             # or you may need to use a different approach with Supabase
             pass
-
-    def _ensure_initiative_id(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure initiative_id and tenant_id are set in data"""
-        if self.initiative_id:
-            if "initiative_id" not in data:
-                data["initiative_id"] = self.initiative_id
-            if "tenant_id" not in data:
-                data["tenant_id"] = self.initiative_id  # Keep them in sync
-        return data
 
     async def insert(self, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Insert data with initiative_id automatically added"""
