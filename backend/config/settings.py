@@ -1,4 +1,4 @@
-# backend/config/settings.py
+# backend/config/settings.py (Updated version with encryption)
 
 from pydantic_settings import BaseSettings
 from pydantic import BaseModel, Field
@@ -16,36 +16,40 @@ class ModelConfig(BaseModel):
     provider: ModelProvider
     api_key_env: str  # Environment variable name for API key
     api_base: Optional[str] = None  # Custom API endpoint
-    model_name: str = "gpt-4-turbo-preview"
+    model_name: str = "gpt-5"
     temperature: float = 0.7
     max_tokens: int = 4000
     timeout: int = 60
 
 
 class Settings(BaseSettings):
-    """Global application settings"""
+    """Global application settings with encryption support"""
     
     # Application
     APP_NAME: str = "Campaign Management Platform"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "2.0.0"  # Updated for token encryption feature
     DEBUG: bool = False
     
     # Database
     SUPABASE_URL: str
     SUPABASE_KEY: str
     SUPABASE_SERVICE_KEY: str  # For admin operations
-    SUPABASE_DB_URL: str | None = None  # Optional direct Postgres connection string (psycopg / admin ops)
+    SUPABASE_DB_URL: Optional[str] = None  # Direct Postgres connection for migrations
     
-    # API Keys (loaded from environment)
+    # Encryption
+    ENCRYPTION_KEY: Optional[str] = None  # Key for encrypting tokens
+    
+    # API Keys (loaded from environment) - for development/testing only
+    # Production tokens should be stored encrypted in database
     OPENAI_API_KEY: Optional[str] = None
     GROK_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     PERPLEXITY_API_KEY: Optional[str] = None
     
-    # Meta (Facebook/Instagram) API
+    # Meta (Facebook/Instagram) API - App-level credentials only
+    # Page/User specific tokens are stored encrypted in database
     META_APP_ID: str
     META_APP_SECRET: str
-    META_ACCESS_TOKEN: Optional[str] = None
     
     # Model Provider Configurations
     MODEL_CONFIGS: Dict[str, ModelConfig] = {
@@ -85,22 +89,39 @@ class Settings(BaseSettings):
     # Content Generation
     MAX_HASHTAGS: int = 30
     MAX_POST_LENGTH: int = 2200  # Instagram caption limit
-    IMAGE_GENERATION_MODEL: str = "gemini-flash"
-    VIDEO_GENERATION_MODEL: str = "chinese-model-v1"
+    IMAGE_GENERATION_MODEL: str = "dalle-3"
+    VIDEO_GENERATION_MODEL: str = "runway-ml"
     
     # Rate Limiting
     API_RATE_LIMIT: int = 100  # requests per minute
     CONTENT_GENERATION_LIMIT: int = 50  # posts per day
     
+    # Security
+    TOKEN_CACHE_DURATION: int = 3600  # Cache decrypted tokens for 1 hour
+    REQUIRE_ENCRYPTED_TOKENS: bool = True  # Enforce encrypted token storage
+    
     # Paths
     PROMPTS_DIR: str = "agents/*/prompts"
     INITIATIVES_DIR: str = "initiatives"
     ASSETS_DIR: str = "assets"
+    CREDENTIALS_DIR: str = "credentials"  # For storing initiative credentials
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+    
+    def validate_encryption_key(self):
+        """Validate that encryption key is configured"""
+        if self.REQUIRE_ENCRYPTED_TOKENS and not self.ENCRYPTION_KEY:
+            raise ValueError(
+                "ENCRYPTION_KEY is required when REQUIRE_ENCRYPTED_TOKENS is True. "
+                "Generate one with: python scripts/setup/generate_encryption_key.py"
+            )
 
 
 settings = Settings()
+
+# Validate encryption on startup
+if settings.REQUIRE_ENCRYPTED_TOKENS:
+    settings.validate_encryption_key()

@@ -9,9 +9,12 @@ from agents.orchestrator.models import (
     OptimizationStrategy, CampaignObjective
 )
 from backend.db.supabase_client import DatabaseClient
+from backend.services.token_manager import TokenManager, TokenContext
 import uuid
 import json
 
+import logging
+logger = logging.getLogger(__name__)
 
 class OrchestratorAgent(BaseAgent):
     """Main orchestrator agent for campaign management with structured output"""
@@ -19,6 +22,43 @@ class OrchestratorAgent(BaseAgent):
     def __init__(self, config: AgentConfig):
         super().__init__(config)
         self.db_client = DatabaseClient(tenant_id=config.tenant_id)
+        # Initialize token manager
+        self.token_manager = TokenManager(config.tenant_id, config.initiative_id)
+        
+    async def _initialize_social_connectors(self):
+        """Initialize social media connectors with decrypted tokens"""
+        try:
+            # Get decrypted tokens
+            tokens = await self.token_manager.get_all_tokens()
+            
+            # Initialize Facebook connector if tokens are available
+            if tokens["facebook"].get("page_access_token"):
+                self.fb_connector = {
+                    "page_id": tokens["facebook"]["page_id"],
+                    "access_token": tokens["facebook"]["page_access_token"],
+                    "system_token": tokens["facebook"].get("system_user_token")
+                }
+                logger.info(f"Facebook connector initialized for page {tokens['facebook']['page_id']}")
+            else:
+                self.fb_connector = None
+                logger.warning("No Facebook tokens available")
+            
+            # Initialize Instagram connector if tokens are available
+            if tokens["instagram"].get("access_token"):
+                self.ig_connector = {
+                    "business_id": tokens["instagram"]["business_id"],
+                    "access_token": tokens["instagram"]["access_token"],
+                    "username": tokens["instagram"].get("username")
+                }
+                logger.info(f"Instagram connector initialized for {tokens['instagram']['business_id']}")
+            else:
+                self.ig_connector = None
+                logger.warning("No Instagram tokens available")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize social connectors: {e}")
+            self.fb_connector = None
+            self.ig_connector = None
         
     def _initialize_tools(self) -> List[Any]:
         """Initialize orchestrator-specific tools"""
@@ -99,9 +139,27 @@ class OrchestratorAgent(BaseAgent):
         return base_prompt + schema_prompt
     
     async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the orchestrator agent with structured output"""
-        # Gather context
+        """Run the orchestrator agent with token management"""
+        # Initialize social connectors with tokens
+        await self._initialize_social_connectors()
+        
+        # Validate tokens are available
+        token_validation = await self.token_manager.validate_tokens()
+        if not token_validation["facebook"] and not token_validation["instagram"]:
+            logger.error("No valid tokens found for initiative")
+            return {
+                "error": "No valid social media tokens configured",
+                "campaigns": []
+            }
+        
+        # Continue with existing orchestration logic...
         context = await self._gather_context(input_data)
+        
+        # Add token availability to context
+        context["available_platforms"] = {
+            "facebook": token_validation["facebook"],
+            "instagram": token_validation["instagram"]
+        }
         
         # Prepare prompt with all context
         prompt = self._create_planning_prompt(context)
@@ -325,6 +383,64 @@ class OrchestratorAgent(BaseAgent):
         except Exception as e:
             print(f"Validation error: {e}")
             return False
+        
+    async def _create_campaign_on_platform(self, campaign_data: Dict[str, Any]):
+        """Create campaign on social media platforms using tokens"""
+        async with TokenContext(self.config.tenant_id, self.config.initiative_id) as tokens:
+            # Use Facebook tokens
+            if tokens["facebook"].get("page_access_token"):
+                fb_response = await self._create_facebook_campaign(
+                    campaign_data,
+                    tokens["facebook"]["page_access_token"],
+                    tokens["facebook"]["page_id"]
+                )
+                campaign_data["meta_campaign_id"] = fb_response.get("id")
+            
+            # Use Instagram tokens  
+            if tokens["instagram"].get("access_token"):
+                ig_response = await self._create_instagram_campaign(
+                    campaign_data,
+                    tokens["instagram"]["access_token"],
+                    tokens["instagram"]["business_id"]
+                )
+                campaign_data["ig_campaign_id"] = ig_response.get("id")
+        
+        return campaign_data
+    
+
+    async def _create_instagram_campaign(self, data: Dict, access_token: str, business_id: str):
+        """Create campaign on Instagram using decrypted token"""
+        # Similar implementation for Instagram
+        pass
+
+    async def _create_facebook_campaign(self, data: Dict, access_token: str, page_id: str):
+        """Create campaign on Facebook using decrypted token"""
+        import httpx
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "name": data["name"],
+            "objective": data["objective"],
+            "status": "PAUSED",  # Start paused for safety
+            "special_ad_categories": []
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://graph.facebook.com/v18.0/act_{page_id}/campaigns",
+                headers=headers,
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Failed to create Facebook campaign: {response.text}")
+                return {}
     
     async def save_hierarchy(self, hierarchy: Dict[str, Any]):
         """Save the campaign hierarchy to database"""

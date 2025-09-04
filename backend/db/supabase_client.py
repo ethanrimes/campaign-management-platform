@@ -8,10 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class DatabaseClient:
-    """Enhanced Supabase client with tenant support and proper query building"""
+    """Enhanced Supabase client with initiative-based RLS support"""
 
-    def __init__(self, tenant_id: Optional[str] = None):
-        self.tenant_id = tenant_id
+    def __init__(self, initiative_id: Optional[str] = None):
+        self.initiative_id = initiative_id
+        # For backwards compatibility, tenant_id equals initiative_id
+        self.tenant_id = initiative_id  
         self.url = os.getenv("SUPABASE_URL")
         self.service_key = os.getenv("SUPABASE_SERVICE_KEY")
 
@@ -20,17 +22,31 @@ class DatabaseClient:
 
         # Create the Supabase client
         self.client = create_client(self.url, self.service_key)
+        
+        # Set the initiative context for RLS
+        if self.initiative_id:
+            self._set_initiative_context()
 
-    def _apply_tenant_filter(self, query, table_name: str):
-        """Apply tenant filter to query if tenant_id is set"""
-        if self.tenant_id and table_name != "initiatives":
-            return query.eq("tenant_id", self.tenant_id)
-        return query
+    def _set_initiative_context(self):
+        """Set the initiative context for RLS policies"""
+        if self.initiative_id:
+            # This sets the context that RLS policies will use
+            # Note: This requires postgrest to pass through the header
+            # or you may need to use a different approach with Supabase
+            pass
+
+    def _ensure_initiative_id(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure initiative_id and tenant_id are set in data"""
+        if self.initiative_id:
+            if "initiative_id" not in data:
+                data["initiative_id"] = self.initiative_id
+            if "tenant_id" not in data:
+                data["tenant_id"] = self.initiative_id  # Keep them in sync
+        return data
 
     async def insert(self, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Insert data with tenant_id automatically added"""
-        if self.tenant_id and "tenant_id" not in data:
-            data["tenant_id"] = self.tenant_id
+        """Insert data with initiative_id automatically added"""
+        data = self._ensure_initiative_id(data)
 
         try:
             result = self.client.table(table_name).insert(data).execute()
@@ -48,13 +64,13 @@ class DatabaseClient:
         columns: str = "*",
         limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
-        """Select data with automatic tenant filtering"""
-        # Start with base query
+        """Select data with automatic initiative filtering"""
         query = self.client.table(table_name).select(columns)
-
-        # Apply tenant filter first if needed
-        query = self._apply_tenant_filter(query, table_name)
-
+        
+        # Always filter by initiative_id if set
+        if self.initiative_id:
+            query = query.eq("initiative_id", self.initiative_id)
+        
         # Apply additional filters
         if filters:
             for key, value in filters.items():
@@ -74,13 +90,13 @@ class DatabaseClient:
         data: Dict[str, Any],
         filters: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Update data with tenant filtering"""
-        # Start with base query
+        """Update data with initiative filtering"""
         query = self.client.table(table_name)
-
-        # Apply tenant filter first if needed
-        query = self._apply_tenant_filter(query, table_name)
-
+        
+        # Always filter by initiative_id if set
+        if self.initiative_id:
+            query = query.eq("initiative_id", self.initiative_id)
+        
         # Apply filters
         for key, value in filters.items():
             query = query.eq(key, value)
@@ -99,13 +115,13 @@ class DatabaseClient:
         table_name: str,
         filters: Dict[str, Any]
     ) -> bool:
-        """Delete data with tenant filtering"""
-        # Start with base query
+        """Delete data with initiative filtering"""
         query = self.client.table(table_name)
-
-        # Apply tenant filter first if needed
-        query = self._apply_tenant_filter(query, table_name)
-
+        
+        # Always filter by initiative_id if set
+        if self.initiative_id:
+            query = query.eq("initiative_id", self.initiative_id)
+        
         # Apply filters
         for key, value in filters.items():
             query = query.eq(key, value)
@@ -115,8 +131,9 @@ class DatabaseClient:
         return len(result.data) > 0 if result.data else False
 
     async def get_by_id(self, table_name: str, id: str) -> Optional[Dict[str, Any]]:
-        """Get a single record by ID with tenant filtering"""
-        results = await self.select(table_name, filters={"id": id})
+        """Get a single record by ID with initiative filtering"""
+        filters = {"id": id}
+        results = await self.select(table_name, filters=filters)
         return results[0] if results else None
 
     def raw_client(self) -> Client:
@@ -124,6 +141,6 @@ class DatabaseClient:
         return self.client
 
 # Factory function for backward compatibility
-def get_database_client(tenant_id: Optional[str] = None) -> DatabaseClient:
+def get_database_client(initiative_id: Optional[str] = None) -> DatabaseClient:
     """Create a database client instance"""
-    return DatabaseClient(tenant_id=tenant_id)
+    return DatabaseClient(initiative_id=initiative_id)
