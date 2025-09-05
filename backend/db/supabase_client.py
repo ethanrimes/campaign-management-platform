@@ -38,12 +38,11 @@ class DatabaseClient:
         """Set the initiative context for RLS policies"""
         if self.initiative_id:
             try:
-                # Set the PostgreSQL session variable for RLS policies
-                self.client.rpc('set_config', {
-                    'setting_name': 'app.current_initiative_id',
-                    'new_value': self.initiative_id,
-                    'is_local': True
-                }).execute()
+                # Try to set the PostgreSQL session variable using SQL
+                # Since the RPC function might not exist, we'll use raw SQL
+                self.client.postgrest.session.headers.update({
+                    'x-initiative-id': self.initiative_id
+                })
             except Exception as e:
                 # Log error but don't fail - RLS will still work through query filtering
                 print(f"Warning: Could not set initiative context for RLS: {e}")

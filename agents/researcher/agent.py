@@ -136,7 +136,7 @@ class ResearchAgent(BaseAgent):
         name = initiative.get("name", "")
         description = initiative.get("description", "")
         category = initiative.get("category", "")
-        objectives = initiative.get("objectives", {})
+        objectives = initiative.get("objectives") or {}
         
         logger.info("🧠 Analyzing initiative to generate queries...")
         logger.info(f"  Initiative focus: {category}")
@@ -297,8 +297,9 @@ class ResearchAgent(BaseAgent):
             ])
         
         # Add objective keywords
-        if initiative.get("objectives", {}).get("primary"):
-            obj_words = initiative["objectives"]["primary"].lower().split()
+        objectives = initiative.get("objectives") or {}
+        if objectives.get("primary"):
+            obj_words = objectives["primary"].lower().split()
             relevance_keywords.extend(obj_words)
         
         logger.info(f"🔎 Filtering with keywords: {', '.join(relevance_keywords[:5])}")
@@ -467,7 +468,7 @@ class ResearchAgent(BaseAgent):
                 "sources": insights["sources"],
                 "relevance_score": {"overall": 0.8},
                 "tags": ["automated", "perplexity"],
-                "expires_at": (datetime.utcnow() + timedelta(days=7)).isoformat()
+                "expires_at": (datetime.now(datetime.timezone.utc) + timedelta(days=7)).isoformat()
             }
             
             await self.db_client.insert("research", research_entry)
