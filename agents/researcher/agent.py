@@ -1,7 +1,7 @@
 # agents/researcher/agent.py
 
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from agents.base.agent import BaseAgent, AgentConfig, AgentOutput
 from tools.search.perplexity_search import PerplexitySearch
 from backend.db.supabase_client import DatabaseClient
@@ -468,7 +468,7 @@ class ResearchAgent(BaseAgent):
                 "sources": insights["sources"],
                 "relevance_score": {"overall": 0.8},
                 "tags": ["automated", "perplexity"],
-                "expires_at": (datetime.now(datetime.timezone.utc) + timedelta(days=7)).isoformat()
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
             }
             
             await self.db_client.insert("research", research_entry)

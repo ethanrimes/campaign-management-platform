@@ -22,6 +22,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Fallback dates for when parsing fails - clearly identifiable as placeholders
+FALLBACK_START_DATE = datetime(2000, 1, 1, 0, 0, 0)
+FALLBACK_END_DATE = datetime(2000, 1, 31, 0, 0, 0)
+
 
 class PlanningAgent(BaseAgent):
     """Planning agent for campaign strategy and budget allocation"""
@@ -166,8 +170,9 @@ class PlanningAgent(BaseAgent):
         if not budget_valid:
             planner_output = self._adjust_budget(planner_output, context["budget"]["total"])
         
-        # Save the plan to database
-        await self.save_plan(planner_output.dict())
+        # Save the plan to database - ensure JSON serializable
+        plan_dict = planner_output.dict()
+        await self.save_plan(self._make_json_serializable(plan_dict))
         
         logger.info("\n" + "="*70)
         logger.info("PLANNING EXECUTION COMPLETE")
@@ -181,8 +186,9 @@ class PlanningAgent(BaseAgent):
         for camp_data in raw_output.get("campaigns", []):
             ad_sets = []
             for ad_set_data in camp_data.get("ad_sets", []):
+                ad_set_id = ad_set_data.get("id", str(uuid.uuid4()))
                 ad_set = AdSet(
-                    id=ad_set_data.get("id", str(uuid.uuid4())),
+                    id=self._ensure_valid_uuid(ad_set_id),
                     name=ad_set_data["name"],
                     target_audience=TargetAudience(**ad_set_data.get("target_audience", {
                         "age_range": [18, 65],
@@ -202,16 +208,14 @@ class PlanningAgent(BaseAgent):
                 )
                 ad_sets.append(ad_set)
             
+            campaign_id = camp_data.get("id", str(uuid.uuid4()))
             campaign = Campaign(
-                id=camp_data.get("id", str(uuid.uuid4())),
+                id=self._ensure_valid_uuid(campaign_id),
                 name=camp_data["name"],
                 objective=CampaignObjective(camp_data["objective"]),
                 description=camp_data.get("description"),
                 budget=BudgetAllocation(**camp_data.get("budget", {})),
-                schedule=Schedule(
-                    start_date=datetime.fromisoformat(camp_data["schedule"]["start_date"]),
-                    end_date=datetime.fromisoformat(camp_data["schedule"]["end_date"])
-                ),
+                schedule=self._parse_schedule(camp_data.get("schedule", {})),
                 ad_sets=ad_sets
             )
             campaigns.append(campaign)
@@ -232,6 +236,55 @@ class PlanningAgent(BaseAgent):
         )
         
         return output
+    
+    def _parse_schedule(self, schedule_data: Dict[str, Any]) -> Schedule:
+        """Parse schedule data with fallback dates for invalid formats"""
+        # Parse start date with fallback
+        try:
+            start_date_str = schedule_data.get("start_date", "")
+            if not start_date_str or start_date_str == "N/A":
+                raise ValueError("Missing or invalid start_date")
+            start_date = datetime.fromisoformat(start_date_str)
+        except (ValueError, KeyError, TypeError):
+            start_date = FALLBACK_START_DATE
+            logger.warning(f"Invalid start_date '{schedule_data.get('start_date')}', using fallback: {FALLBACK_START_DATE}")
+        
+        # Parse end date with fallback
+        try:
+            end_date_str = schedule_data.get("end_date", "")
+            if not end_date_str or end_date_str == "N/A":
+                raise ValueError("Missing or invalid end_date")
+            end_date = datetime.fromisoformat(end_date_str)
+        except (ValueError, KeyError, TypeError):
+            end_date = FALLBACK_END_DATE
+            logger.warning(f"Invalid end_date '{schedule_data.get('end_date')}', using fallback: {FALLBACK_END_DATE}")
+        
+        return Schedule(start_date=start_date, end_date=end_date)
+    
+    def _make_json_serializable(self, data: Any) -> Any:
+        """Convert data to be JSON serializable, handling datetime objects"""
+        if isinstance(data, datetime):
+            return data.isoformat()
+        elif isinstance(data, dict):
+            return {key: self._make_json_serializable(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._make_json_serializable(item) for item in data]
+        else:
+            return data
+    
+    def _ensure_valid_uuid(self, id_value: str) -> str:
+        """Ensure the ID is a valid UUID, generate new one if not"""
+        import re
+        
+        # Check if it's already a valid UUID format
+        uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        if re.match(uuid_pattern, str(id_value).lower()):
+            return str(id_value)
+        
+        # Generate new UUID if invalid format
+        new_uuid = str(uuid.uuid4())
+        logger.warning(f"Invalid ID format '{id_value}', generated new UUID: {new_uuid}")
+        return new_uuid
     
     def _adjust_budget(self, output: PlannerOutput, total_budget: float) -> PlannerOutput:
         """Adjust budget allocation if needed"""
@@ -290,6 +343,17 @@ class PlanningAgent(BaseAgent):
         
         # Store in a plans table or as part of campaigns
         for campaign_data in plan["campaigns"]:
+            # Ensure dates are properly serialized
+            schedule_data = campaign_data.get("schedule", {})
+            start_date = schedule_data.get("start_date")
+            end_date = schedule_data.get("end_date")
+            
+            # Convert datetime objects to ISO strings if needed
+            if isinstance(start_date, datetime):
+                start_date = start_date.isoformat()
+            if isinstance(end_date, datetime):
+                end_date = end_date.isoformat()
+            
             campaign_entry = {
                 "id": campaign_data["id"],
                 "initiative_id": self.config.initiative_id,
@@ -297,8 +361,8 @@ class PlanningAgent(BaseAgent):
                 "objective": campaign_data["objective"],
                 "daily_budget": campaign_data.get("budget", {}).get("daily"),
                 "lifetime_budget": campaign_data.get("budget", {}).get("lifetime"),
-                "start_date": campaign_data.get("schedule", {}).get("start_date"),
-                "end_date": campaign_data.get("schedule", {}).get("end_date"),
+                "start_date": start_date,
+                "end_date": end_date,
                 "status": "draft",
                 "is_active": True
             }

@@ -119,8 +119,8 @@ class PlannerContextManager:
                 "opportunities": research_opportunities
             },
             "budget": {
-                "daily": daily_budget.get("amount", 100),
-                "total": total_budget.get("amount", 10000)
+                "daily": daily_budget.get("amount") or 100,
+                "total": total_budget.get("amount") or 10000
             },
             "metrics": []
         }
