@@ -1,4 +1,4 @@
-# agents/orchestrator/models.py
+# agents/planner/models.py
 
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
@@ -146,8 +146,8 @@ class OptimizationStrategy(BaseModel):
     reasoning: str = Field(description="Explanation of strategy")
 
 
-class OrchestratorOutput(BaseModel):
-    """Main orchestrator output structure"""
+class PlannerOutput(BaseModel):
+    """Main planner output structure"""
     campaigns: List[Campaign] = Field(description="Campaign hierarchy")
     total_budget_allocated: float = Field(description="Total budget allocated")
     optimization_strategy: OptimizationStrategy = Field(description="Optimization approach")

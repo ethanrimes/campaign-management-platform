@@ -12,13 +12,13 @@ class AgentMemory:
     def __init__(
         self,
         agent_id: str,
-        tenant_id: str,
+        initiative_id: str,
         max_short_term_messages: int = 20
     ):
         self.agent_id = agent_id
-        self.tenant_id = tenant_id
+        self.initiative_id = initiative_id
         self.max_short_term_messages = max_short_term_messages
-        self.db_client = DatabaseClient(tenant_id=tenant_id)
+        self.db_client = DatabaseClient(initiative_id=initiative_id)
         
         # Short-term memory (in-memory storage)
         self.short_term: List[Dict[str, Any]] = []
@@ -104,7 +104,7 @@ class AgentMemory:
         """Export memory state"""
         return {
             "agent_id": self.agent_id,
-            "tenant_id": self.tenant_id,
+            "initiative_id": self.initiative_id,
             "short_term": self.short_term,
             "message_count": len(self.short_term)
         }

@@ -14,7 +14,6 @@ import asyncio
 import os
 import sys
 import uuid
-import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -24,6 +23,11 @@ import logging
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+# Setup logging first
+from backend.config.logging_config import LoggingConfig
+LoggingConfig.setup_logging(log_level='INFO')
+logger = logging.getLogger(__name__)
+
 from backend.utils.encryption import TokenEncryption
 from backend.db.supabase_client import DatabaseClient
 from supabase import create_client
@@ -31,9 +35,6 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
-logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger(__name__)
 
 
 class InitiativeCreator:
@@ -299,25 +300,6 @@ class InitiativeCreator:
             logger.error(f"Database operation failed: {e}")
             raise
     
-    def save_credentials(self, basic_info: Dict):
-        """Save tenant ID and initiative ID to a file for reference"""
-        creds_dir = Path("credentials")
-        creds_dir.mkdir(exist_ok=True)
-        
-        creds_file = creds_dir / f"{basic_info['name'].replace(' ', '_').lower()}_credentials.json"
-        
-        credentials = {
-            "initiative_name": basic_info['name'],
-            "initiative_id": self.initiative_id,
-            "created_at": datetime.now().isoformat(),
-            "note": "Use these IDs for API calls and agent operations"
-        }
-        
-        with open(creds_file, 'w') as f:
-            json.dump(credentials, f, indent=2)
-        
-        return creds_file
-    
     async def run(self):
         """Run the interactive setup process"""
         self.print_header()
@@ -354,25 +336,24 @@ class InitiativeCreator:
             return
         
         # Save to database
-        print("\n🔄 Saving to database...")
+        print("\n📄 Saving to database...")
         try:
             await self.save_to_database(basic_info, fb_tokens, ig_tokens)
-            
-            # Save credentials file
-            creds_file = self.save_credentials(basic_info)
             
             print("\n" + "="*70)
             print("✅ INITIATIVE CREATED SUCCESSFULLY!")
             print("="*70)
             print(f"\n📋 Initiative Name: {basic_info['name']}")
             print(f"🆔 Initiative ID: {self.initiative_id}")
-            print(f"🆔 Secondary ID: {self.initiative_id}")
-            print(f"\n💾 Credentials saved to: {creds_file}")
-            print("\n⚡ Use these IDs for:")
+            print("\n⚡ Use this Initiative ID for:")
             print("  • API calls (X-Initiative-ID header)")
             print("  • Running agents")
             print("  • Accessing data")
             print("\n🔒 All tokens have been encrypted and stored securely.")
+            print("\n💡 Next steps:")
+            print("  1. Test workflows: python tests/test_orchestrated_workflows.py")
+            print(f"     --initiative-id {self.initiative_id}")
+            print("  2. Start scheduler: python scripts/cron/scheduler.py")
             
         except Exception as e:
             print(f"\n❌ Error creating initiative: {e}")

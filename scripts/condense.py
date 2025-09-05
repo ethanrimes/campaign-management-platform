@@ -161,6 +161,9 @@ class GitignoreParser:
         'node_modules',
         'package-lock.json',
         'yarn.lock',
+
+        # test outputs
+        'test_outputs',
     ]
     
     def __init__(self, gitignore_path):

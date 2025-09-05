@@ -14,7 +14,7 @@ class ContentCreatorAgent(BaseAgent):
     
     def __init__(self, config: AgentConfig):
         super().__init__(config)
-        self.db_client = DatabaseClient(tenant_id=config.tenant_id)
+        self.db_client = DatabaseClient(initiative_id=config.initiative_id)
         
     def _initialize_tools(self) -> List[Any]:
         """Initialize content creation tools"""
@@ -253,7 +253,7 @@ class ContentCreatorAgent(BaseAgent):
         """Save generated posts to database"""
         for post in posts:
             post_entry = {
-                "tenant_id": self.config.tenant_id,
+                "initiative_id": self.config.initiative_id,
                 "ad_set_id": ad_set_id,
                 "post_type": post["post_type"],
                 "text_content": post["text_content"],
