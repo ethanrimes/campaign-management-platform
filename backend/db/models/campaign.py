@@ -9,7 +9,6 @@ from uuid import uuid4
 class Campaign(BaseModel):
     """Campaign model"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    tenant_id: str
     initiative_id: str
     
     # Campaign Details

@@ -249,7 +249,6 @@ class InitiativeCreator:
             # Prepare initiative data
             initiative_data = {
                 "id": self.initiative_id,
-                "tenant_id": self.initiative_id,
                 "name": basic_info['name'],
                 "description": basic_info.get('description', ''),
                 "category": basic_info.get('category'),
@@ -276,7 +275,6 @@ class InitiativeCreator:
             
             # Prepare token data
             token_data = {
-                "tenant_id": self.initiative_id,
                 "initiative_id": self.initiative_id,
                 **encrypted_tokens,
                 # Non-sensitive metadata
@@ -368,10 +366,10 @@ class InitiativeCreator:
             print("="*70)
             print(f"\n📋 Initiative Name: {basic_info['name']}")
             print(f"🆔 Initiative ID: {self.initiative_id}")
-            print(f"🏢 Tenant ID: {self.tenant_id}")
+            print(f"🆔 Secondary ID: {self.initiative_id}")
             print(f"\n💾 Credentials saved to: {creds_file}")
             print("\n⚡ Use these IDs for:")
-            print("  • API calls (X-Tenant-ID header)")
+            print("  • API calls (X-Initiative-ID header)")
             print("  • Running agents")
             print("  • Accessing data")
             print("\n🔒 All tokens have been encrypted and stored securely.")

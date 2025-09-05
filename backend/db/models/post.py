@@ -9,7 +9,7 @@ from uuid import uuid4
 class Post(BaseModel):
     """Post/Content model"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    tenant_id: str
+    initiative_id: str
     ad_set_id: str
     
     # Content

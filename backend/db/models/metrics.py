@@ -9,7 +9,7 @@ from uuid import uuid4
 class Metrics(BaseModel):
     """Performance metrics model"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    tenant_id: str
+    initiative_id: str
     entity_type: str  # campaign, ad_set, post
     entity_id: str
     

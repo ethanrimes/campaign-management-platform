@@ -9,7 +9,7 @@ from uuid import uuid4
 class AdSet(BaseModel):
     """Ad Set model"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    tenant_id: str
+    initiative_id: str
     campaign_id: str
     
     # Ad Set Details

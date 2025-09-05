@@ -20,24 +20,39 @@ class DatabaseClient:
             raise ValueError("Supabase credentials not found in environment")
         
         self.client = create_client(self.url, self.service_key)
+        
+        # Set initiative context for RLS
+        if self.initiative_id:
+            self._set_initiative_context()
 
     def _ensure_initiative_id(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure initiative_id is set in data"""
+        """Ensure initiative_id is set in data (except for initiatives table itself)"""
+        # Don't add initiative_id to the initiatives table itself
         if self.initiative_id and "initiative_id" not in data:
+            # Only add initiative_id if we're not dealing with the initiatives table
+            # (we can't check table name here, so this needs to be handled by the calling method)
             data["initiative_id"] = self.initiative_id
         return data
 
     def _set_initiative_context(self):
         """Set the initiative context for RLS policies"""
         if self.initiative_id:
-            # This sets the context that RLS policies will use
-            # Note: This requires postgrest to pass through the header
-            # or you may need to use a different approach with Supabase
-            pass
+            try:
+                # Set the PostgreSQL session variable for RLS policies
+                self.client.rpc('set_config', {
+                    'setting_name': 'app.current_initiative_id',
+                    'new_value': self.initiative_id,
+                    'is_local': True
+                }).execute()
+            except Exception as e:
+                # Log error but don't fail - RLS will still work through query filtering
+                print(f"Warning: Could not set initiative context for RLS: {e}")
 
     async def insert(self, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Insert data with initiative_id automatically added"""
-        data = self._ensure_initiative_id(data)
+        # Only add initiative_id for tables other than initiatives
+        if table_name != "initiatives":
+            data = self._ensure_initiative_id(data)
 
         try:
             result = self.client.table(table_name).insert(data).execute()
@@ -58,9 +73,14 @@ class DatabaseClient:
         """Select data with automatic initiative filtering"""
         query = self.client.table(table_name).select(columns)
         
-        # Always filter by initiative_id if set
+        # Special handling for initiatives table vs other tables
         if self.initiative_id:
-            query = query.eq("initiative_id", self.initiative_id)
+            if table_name == "initiatives":
+                # For initiatives table, filter by 'id' not 'initiative_id'
+                query = query.eq("id", self.initiative_id)
+            else:
+                # For all other tables, filter by 'initiative_id'
+                query = query.eq("initiative_id", self.initiative_id)
         
         # Apply additional filters
         if filters:
@@ -84,9 +104,12 @@ class DatabaseClient:
         """Update data with initiative filtering"""
         query = self.client.table(table_name)
         
-        # Always filter by initiative_id if set
+        # Special handling for initiatives table
         if self.initiative_id:
-            query = query.eq("initiative_id", self.initiative_id)
+            if table_name == "initiatives":
+                query = query.eq("id", self.initiative_id)
+            else:
+                query = query.eq("initiative_id", self.initiative_id)
         
         # Apply filters
         for key, value in filters.items():
@@ -109,9 +132,12 @@ class DatabaseClient:
         """Delete data with initiative filtering"""
         query = self.client.table(table_name)
         
-        # Always filter by initiative_id if set
+        # Special handling for initiatives table
         if self.initiative_id:
-            query = query.eq("initiative_id", self.initiative_id)
+            if table_name == "initiatives":
+                query = query.eq("id", self.initiative_id)
+            else:
+                query = query.eq("initiative_id", self.initiative_id)
         
         # Apply filters
         for key, value in filters.items():

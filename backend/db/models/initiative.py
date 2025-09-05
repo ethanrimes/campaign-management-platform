@@ -9,7 +9,6 @@ from uuid import uuid4
 class Initiative(BaseModel):
     """Initiative/Presence model"""
     id: str = Field(default_factory=lambda: str(uuid4()))
-    tenant_id: str
     name: str
     description: Optional[str] = None
     

@@ -4,254 +4,477 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from agents.base.agent import BaseAgent, AgentConfig, AgentOutput
 from tools.search.perplexity_search import PerplexitySearch
-from tools.search.facebook_search import FacebookSearch
-from tools.search.instagram_search import InstagramSearch
 from backend.db.supabase_client import DatabaseClient
 import json
 import uuid
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 class ResearchAgent(BaseAgent):
-    """Research agent for gathering insights and competitive intelligence"""
+    """Focused research agent for gathering search insights"""
     
     def __init__(self, config: AgentConfig):
-        # Initialize search tools BEFORE calling super().__init__()
+        # Initialize tools BEFORE calling parent init
         self.perplexity = PerplexitySearch()
-        self.facebook = FacebookSearch()
-        self.instagram = InstagramSearch()
         
+        # Now call parent init
         super().__init__(config)
-        self.db_client = DatabaseClient(tenant_id=config.tenant_id)
+        
+        # Initialize database client with initiative_id
+        self.db_client = DatabaseClient(initiative_id=config.initiative_id)
         
     def _initialize_tools(self) -> List[Any]:
-        """Initialize research-specific tools"""
-        # Now we can safely reference the tools
-        return [
-            self.perplexity,
-            self.facebook,
-            self.instagram
-        ]
+        """Initialize research tools"""
+        return [self.perplexity]
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for researcher"""
-        with open("agents/researcher/prompts/system_prompt.txt", "r") as f:
-            return f.read()
+        return """You are a research analyst specializing in gathering and filtering relevant information.
+        Your task is to:
+        1. Analyze the initiative's objectives and description
+        2. Generate relevant search queries
+        3. Filter results for relevance
+        4. Return only high-quality, actionable insights
+        """
     
     async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the research agent"""
-        # Get initiative context
-        initiative_id = self.config.initiative_id
-        context = await self._gather_context(initiative_id)
+        """Run the research agent with focused functionality"""
+        logger.info("=" * 60)
+        logger.info("RESEARCH AGENT STARTING")
+        logger.info("=" * 60)
         
-        # Determine research priorities
-        research_plan = self._create_research_plan(context)
+        # Step 1: Fetch initiative data
+        logger.info("\n📊 STEP 1: Fetching initiative data...")
+        initiative_data = await self._fetch_initiative_data()
         
-        # Execute research
-        research_results = await self._execute_research(research_plan)
+        # Step 2: Determine search queries
+        logger.info("\n🔍 STEP 2: Determining search queries...")
+        search_queries = self._determine_search_queries(initiative_data)
         
-        # Synthesize insights
-        insights = self._synthesize_insights(research_results, context)
+        # Step 3: Iteratively search and collect results
+        logger.info("\n🌐 STEP 3: Executing searches...")
+        all_results = await self._iterative_search(search_queries, initiative_data)
         
-        # Store research in database
-        await self._store_research(insights)
+        # Step 4: Filter and structure relevant results
+        logger.info("\n✨ STEP 4: Filtering relevant results...")
+        filtered_insights = self._filter_relevant_results(all_results, initiative_data)
         
-        return insights
+        # Step 5: Store research in database
+        logger.info("\n💾 STEP 5: Storing research results...")
+        await self._store_research(filtered_insights)
+        
+        logger.info("\n" + "=" * 60)
+        logger.info("RESEARCH AGENT COMPLETED")
+        logger.info("=" * 60)
+        
+        return filtered_insights
     
-    async def _gather_context(self, initiative_id: str) -> Dict[str, Any]:
-        """Gather context about the initiative"""
-        # Get initiative details
-        initiatives = await self.db_client.select(
-            "initiatives",
-            filters={"id": initiative_id}
-        )
-        initiative = initiatives[0] if initiatives else {}
-        
-        # Get recent research
-        existing_research = await self.db_client.select(
-            "research",
-            filters={"initiative_id": initiative_id},
-            limit=10
-        )
-        
-        # Get current campaigns
-        campaigns = await self.db_client.select(
-            "campaigns",
-            filters={
-                "initiative_id": initiative_id,
-                "is_active": True
-            }
-        )
-        
-        return {
-            "initiative": initiative,
-            "existing_research": existing_research,
-            "current_campaigns": campaigns
-        }
-    
-    def _create_research_plan(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a research plan based on context"""
-        initiative = context["initiative"]
-        
-        # Extract key topics from initiative
-        category = initiative.get("category", "general")
-        objectives = initiative.get("objectives", {})
-        
-        research_plan = {
-            "topics": [],
-            "competitor_pages": [],
-            "hashtags": [],
-            "trends": []
-        }
-        
-        # Define research topics based on category
-        if category == "Education":
-            research_plan["topics"] = [
-                "education technology trends",
-                "online learning best practices",
-                "student engagement strategies"
-            ]
-        elif category == "Career/Recruiting":
-            research_plan["topics"] = [
-                "tech recruiting trends",
-                "software engineering job market",
-                "employer branding strategies"
-            ]
-        
-        # Add initiative-specific topics
-        if "primary" in objectives:
-            research_plan["topics"].append(objectives["primary"])
-        
-        return research_plan
-    
-    async def _execute_research(self, plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the research plan"""
-        results = {
-            "web_research": [],
-            "social_research": [],
-            "hashtag_research": [],
-            "competitor_analysis": []
-        }
-        
-        # Web research via Perplexity
-        for topic in plan["topics"]:
-            try:
-                search_results = await self.perplexity.search(
-                    query=topic,
-                    max_results=5,
-                    search_type="general"
-                )
-                results["web_research"].append({
-                    "topic": topic,
-                    "results": search_results
-                })
-            except Exception as e:
-                print(f"Error searching for {topic}: {e}")
-        
-        # Social media research
-        for topic in plan["topics"][:3]:  # Limit to avoid rate limits
-            # Facebook pages
-            fb_pages = await self.facebook.search_pages(
-                query=topic,
+    async def _fetch_initiative_data(self) -> Dict[str, Any]:
+        """Fetch and log initiative data"""
+        try:
+            # Fetch initiative
+            initiatives = await self.db_client.select(
+                "initiatives",
+                filters={"id": self.config.initiative_id}
+            )
+            
+            if not initiatives:
+                raise ValueError(f"No initiative found with ID: {self.config.initiative_id}")
+            
+            initiative = initiatives[0]
+            
+            # Log preview of fetched data
+            logger.info("✓ Initiative fetched successfully")
+            logger.info(f"  - Name: {initiative.get('name', 'N/A')}")
+            logger.info(f"  - Description: {initiative.get('description', 'N/A')[:100]}...")
+            logger.info(f"  - Category: {initiative.get('category', 'N/A')}")
+            logger.info(f"  - Optimization Metric: {initiative.get('optimization_metric', 'N/A')}")
+            
+            # Fetch recent campaigns for context
+            campaigns = await self.db_client.select(
+                "campaigns",
+                filters={
+                    "initiative_id": self.config.initiative_id,
+                    "is_active": True
+                },
                 limit=5
             )
-            results["social_research"].append({
-                "platform": "facebook",
-                "topic": topic,
-                "pages": fb_pages
-            })
             
-            # Instagram hashtags
-            hashtags = await self.instagram.search_hashtags(
-                query=topic,
-                limit=20
+            logger.info(f"✓ Found {len(campaigns)} active campaign(s)")
+            for i, campaign in enumerate(campaigns[:3], 1):
+                logger.info(f"  Campaign {i}: {campaign.get('name', 'Unknown')} - {campaign.get('objective', 'N/A')}")
+            
+            # Fetch previous research for context
+            existing_research = await self.db_client.select(
+                "research",
+                filters={"initiative_id": self.config.initiative_id},
+                limit=3
             )
-            results["hashtag_research"].append({
-                "topic": topic,
-                "hashtags": hashtags
-            })
-        
-        return results
+            
+            logger.info(f"✓ Found {len(existing_research)} previous research entries")
+            
+            return {
+                "initiative": initiative,
+                "campaigns": campaigns,
+                "existing_research": existing_research
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch initiative data: {e}")
+            raise
     
-    def _synthesize_insights(self, research: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Synthesize research into actionable insights"""
-        insights = {
-            "summary": "",
-            "key_findings": [],
-            "content_opportunities": [],
-            "recommended_hashtags": [],
-            "competitor_insights": [],
-            "trending_topics": [],
-            "sources": []
-        }
+    def _determine_search_queries(self, initiative_data: Dict[str, Any]) -> List[str]:
+        """Determine search queries based on initiative data"""
+        initiative = initiative_data["initiative"]
+        queries = []
         
-        # Process web research
-        for web_result in research.get("web_research", []):
-            topic = web_result["topic"]
-            for result in web_result["results"]:
-                insights["key_findings"].append({
-                    "topic": topic,
-                    "finding": result.get("snippet", ""),
-                    "source": result.get("url", ""),
-                    "relevance": result.get("relevance_score", 0.5)
-                })
-                insights["sources"].append(result.get("url", ""))
+        # Extract key information
+        name = initiative.get("name", "")
+        description = initiative.get("description", "")
+        category = initiative.get("category", "")
+        objectives = initiative.get("objectives", {})
         
-        # Process hashtag research
-        all_hashtags = set()
-        for hashtag_result in research.get("hashtag_research", []):
-            all_hashtags.update(hashtag_result["hashtags"])
-        insights["recommended_hashtags"] = list(all_hashtags)[:30]
+        logger.info("🧠 Analyzing initiative to generate queries...")
+        logger.info(f"  Initiative focus: {category}")
         
-        # Process social research
-        for social_result in research.get("social_research", []):
-            if social_result["platform"] == "facebook":
-                for page in social_result["pages"]:
-                    insights["competitor_insights"].append({
-                        "name": page["name"],
-                        "category": page.get("category", ""),
-                        "link": page["link"],
-                        "followers": page.get("fan_count", 0)
-                    })
+        # Generate base queries from objectives
+        if objectives.get("primary"):
+            base_query = f"{objectives['primary']} {category} trends 2024"
+            queries.append(base_query)
+            logger.info(f"  Query 1: {base_query}")
+        
+        # Category-specific queries
+        if category:
+            category_query = f"latest {category.lower()} marketing strategies social media"
+            queries.append(category_query)
+            logger.info(f"  Query 2: {category_query}")
+            
+            engagement_query = f"{category.lower()} audience engagement tactics Instagram Facebook"
+            queries.append(engagement_query)
+            logger.info(f"  Query 3: {engagement_query}")
+        
+        # Parse description for key topics
+        if description:
+            # Extract key phrases (simplified - in production use NLP)
+            keywords = [word for word in description.split() if len(word) > 5][:3]
+            if keywords:
+                keyword_query = f"{' '.join(keywords)} best practices"
+                queries.append(keyword_query)
+                logger.info(f"  Query 4: {keyword_query}")
+        
+        # Competitor and trend queries
+        competitor_query = f"{category} competitors social media analysis"
+        queries.append(competitor_query)
+        logger.info(f"  Query 5: {competitor_query}")
+        
+        # Hashtag research
+        hashtag_query = f"trending hashtags {category} 2024"
+        queries.append(hashtag_query)
+        logger.info(f"  Query 6: {hashtag_query}")
+        
+        logger.info(f"✓ Generated {len(queries)} search queries")
+        
+        return queries[:6]  # Limit to 6 queries
+    
+    async def _iterative_search(self, queries: List[str], initiative_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Iteratively search until sufficient information is gathered"""
+        all_results = []
+        unique_urls = set()
+        max_iterations = 2
+        min_results_needed = 15
+        
+        logger.info(f"🔄 Starting iterative search (target: {min_results_needed} unique results)")
+        
+        iteration = 1
+        for query in queries:
+            if len(all_results) >= min_results_needed * 2:  # Stop if we have plenty
+                break
+                
+            logger.info(f"\n  Searching: '{query}'")
+            
+            try:
+                # Search with Perplexity
+                search_results = await self.perplexity.search(
+                    query=query,
+                    max_results=5
+                )
+                
+                # Process results
+                for result in search_results:
+                    if result.get("url") not in unique_urls:
+                        all_results.append({
+                            "query": query,
+                            "title": result.get("title", ""),
+                            "url": result.get("url", ""),
+                            "snippet": result.get("snippet", ""),
+                            "relevance_score": result.get("relevance_score", 0.5)
+                        })
+                        unique_urls.add(result.get("url"))
+                
+                logger.info(f"    ✓ Found {len(search_results)} results")
+                
+            except Exception as e:
+                logger.warning(f"    ⚠ Search failed: {e}")
+                continue
+        
+        # Check if we need more results
+        if len(all_results) < min_results_needed and iteration < max_iterations:
+            logger.info(f"\n📈 Need more results ({len(all_results)}/{min_results_needed}). Generating additional queries...")
+            
+            # Generate follow-up queries based on initial results
+            follow_up_queries = self._generate_follow_up_queries(all_results, initiative_data)
+            
+            for query in follow_up_queries[:3]:  # Limit follow-up queries
+                logger.info(f"\n  Follow-up search: '{query}'")
+                
+                try:
+                    search_results = await self.perplexity.search(
+                        query=query,
+                        max_results=5
+                    )
+                    
+                    for result in search_results:
+                        if result.get("url") not in unique_urls:
+                            all_results.append({
+                                "query": query,
+                                "title": result.get("title", ""),
+                                "url": result.get("url", ""),
+                                "snippet": result.get("snippet", ""),
+                                "relevance_score": result.get("relevance_score", 0.5)
+                            })
+                            unique_urls.add(result.get("url"))
+                    
+                    logger.info(f"    ✓ Found {len(search_results)} additional results")
+                    
+                except Exception as e:
+                    logger.warning(f"    ⚠ Follow-up search failed: {e}")
+        
+        logger.info(f"\n✓ Search completed: {len(all_results)} total results collected")
+        
+        return all_results
+    
+    def _generate_follow_up_queries(self, initial_results: List[Dict[str, Any]], initiative_data: Dict[str, Any]) -> List[str]:
+        """Generate follow-up queries based on initial results"""
+        follow_up_queries = []
+        initiative = initiative_data["initiative"]
+        
+        # Extract common themes from initial results
+        common_words = {}
+        for result in initial_results:
+            words = result.get("snippet", "").lower().split()
+            for word in words:
+                if len(word) > 6:  # Focus on substantial words
+                    common_words[word] = common_words.get(word, 0) + 1
+        
+        # Get top words not in original queries
+        top_words = sorted(common_words.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        if top_words:
+            follow_up_queries.append(f"{top_words[0][0]} {initiative.get('category', '')} strategies")
+        
+        # Add specific platform queries
+        follow_up_queries.append(f"Instagram {initiative.get('category', '')} content ideas 2024")
+        follow_up_queries.append(f"Facebook advertising {initiative.get('category', '')} best practices")
+        
+        return follow_up_queries
+    
+    def _filter_relevant_results(self, all_results: List[Dict[str, Any]], initiative_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Filter and structure relevant results"""
+        initiative = initiative_data["initiative"]
+        
+        # Define relevance keywords based on initiative
+        relevance_keywords = []
+        
+        # Add category keywords
+        if initiative.get("category"):
+            relevance_keywords.extend([
+                initiative["category"].lower(),
+                "marketing", "social media", "engagement", "audience"
+            ])
+        
+        # Add objective keywords
+        if initiative.get("objectives", {}).get("primary"):
+            obj_words = initiative["objectives"]["primary"].lower().split()
+            relevance_keywords.extend(obj_words)
+        
+        logger.info(f"🔎 Filtering with keywords: {', '.join(relevance_keywords[:5])}")
+        
+        # Score and filter results
+        scored_results = []
+        for result in all_results:
+            score = self._calculate_relevance(result, relevance_keywords)
+            if score > 0.3:  # Threshold for relevance
+                result["final_relevance_score"] = score
+                scored_results.append(result)
+        
+        # Sort by relevance
+        scored_results.sort(key=lambda x: x["final_relevance_score"], reverse=True)
+        
+        # Take top results
+        top_results = scored_results[:20]
+        
+        logger.info(f"✓ Filtered to {len(top_results)} relevant results from {len(all_results)} total")
+        
+        # Extract insights
+        key_findings = []
+        recommended_hashtags = set()
+        sources = []
+        
+        for result in top_results[:10]:
+            # Create key finding
+            finding = {
+                "topic": result["query"],
+                "finding": result["snippet"],
+                "source": result["url"],
+                "relevance_score": result["final_relevance_score"]
+            }
+            key_findings.append(finding)
+            sources.append(result["url"])
+            
+            # Extract hashtags from snippets
+            words = result["snippet"].split()
+            for word in words:
+                if word.startswith("#"):
+                    recommended_hashtags.add(word)
+        
+        # Add default hashtags based on category
+        category_hashtags = self._get_category_hashtags(initiative.get("category", ""))
+        recommended_hashtags.update(category_hashtags)
         
         # Create summary
-        insights["summary"] = self._generate_summary(insights, context)
+        summary = self._generate_summary(key_findings, initiative)
+        
+        insights = {
+            "summary": summary,
+            "key_findings": key_findings,
+            "content_opportunities": self._identify_opportunities(top_results),
+            "recommended_hashtags": list(recommended_hashtags)[:30],
+            "sources": sources,
+            "total_results_analyzed": len(all_results),
+            "relevant_results_found": len(top_results)
+        }
+        
+        # Log summary of findings
+        logger.info("\n📊 Research Summary:")
+        logger.info(f"  - Key findings: {len(key_findings)}")
+        logger.info(f"  - Recommended hashtags: {len(recommended_hashtags)}")
+        logger.info(f"  - Content opportunities: {len(insights['content_opportunities'])}")
         
         return insights
     
-    def _generate_summary(self, insights: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Generate a summary of the research findings"""
-        initiative_name = context["initiative"].get("name", "the initiative")
-        num_findings = len(insights["key_findings"])
-        num_competitors = len(insights["competitor_insights"])
+    def _calculate_relevance(self, result: Dict[str, Any], keywords: List[str]) -> float:
+        """Calculate relevance score for a result"""
+        text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
         
-        summary = f"Research completed for {initiative_name}. "
-        summary += f"Analyzed {num_findings} key findings across multiple topics. "
-        summary += f"Identified {num_competitors} relevant competitor pages and "
-        summary += f"{len(insights['recommended_hashtags'])} trending hashtags. "
+        score = 0
+        for keyword in keywords:
+            if keyword in text:
+                score += 1
         
-        if insights["key_findings"]:
-            top_finding = insights["key_findings"][0]
-            summary += f"Key insight: {top_finding['finding'][:100]}..."
+        # Normalize score
+        normalized = score / max(len(keywords), 1)
+        
+        # Combine with original relevance score
+        original_score = result.get("relevance_score", 0.5)
+        final_score = (normalized * 0.7) + (original_score * 0.3)
+        
+        return min(final_score, 1.0)
+    
+    def _get_category_hashtags(self, category: str) -> List[str]:
+        """Get default hashtags for category"""
+        hashtags_map = {
+            "Education": ["#education", "#learning", "#edtech", "#students"],
+            "Business": ["#business", "#entrepreneur", "#startup", "#growth"],
+            "Technology": ["#tech", "#innovation", "#digital", "#technology"],
+            "Nonprofit": ["#nonprofit", "#charity", "#community", "#socialimpact"]
+        }
+        
+        return hashtags_map.get(category, ["#socialmedia", "#marketing"])
+    
+    def _identify_opportunities(self, results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Identify content opportunities from results"""
+        opportunities = []
+        
+        # Look for common themes
+        themes = {}
+        for result in results:
+            snippet = result.get("snippet", "").lower()
+            if "video" in snippet:
+                themes["video"] = themes.get("video", 0) + 1
+            if "story" in snippet or "stories" in snippet:
+                themes["stories"] = themes.get("stories", 0) + 1
+            if "live" in snippet:
+                themes["live"] = themes.get("live", 0) + 1
+            if "ugc" in snippet or "user-generated" in snippet:
+                themes["ugc"] = themes.get("ugc", 0) + 1
+        
+        # Create opportunities based on themes
+        for theme, count in sorted(themes.items(), key=lambda x: x[1], reverse=True)[:3]:
+            if theme == "video":
+                opportunities.append({
+                    "type": "content_format",
+                    "description": "Increase video content production based on engagement trends",
+                    "priority": "high" if count > 3 else "medium"
+                })
+            elif theme == "stories":
+                opportunities.append({
+                    "type": "content_format",
+                    "description": "Utilize Instagram/Facebook Stories for time-sensitive content",
+                    "priority": "high" if count > 2 else "medium"
+                })
+            elif theme == "live":
+                opportunities.append({
+                    "type": "engagement",
+                    "description": "Host live sessions for real-time audience interaction",
+                    "priority": "medium"
+                })
+            elif theme == "ugc":
+                opportunities.append({
+                    "type": "engagement",
+                    "description": "Encourage user-generated content through campaigns",
+                    "priority": "high"
+                })
+        
+        return opportunities
+    
+    def _generate_summary(self, findings: List[Dict[str, Any]], initiative: Dict[str, Any]) -> str:
+        """Generate research summary"""
+        summary = f"Research completed for {initiative.get('name', 'initiative')}. "
+        summary += f"Analyzed {len(findings)} key insights related to {initiative.get('category', 'the focus area')}. "
+        
+        if findings:
+            top_finding = findings[0]
+            summary += f"Key insight: {top_finding['finding'][:150]}... "
+        
+        summary += f"The research identifies opportunities in {initiative.get('optimization_metric', 'engagement')} optimization."
         
         return summary
     
     async def _store_research(self, insights: Dict[str, Any]):
         """Store research results in database"""
-        research_entry = {
-            "tenant_id": self.config.tenant_id,
-            "initiative_id": self.config.initiative_id,
-            "research_type": "comprehensive",
-            "topic": "scheduled_research",
-            "summary": insights["summary"],
-            "insights": insights["key_findings"],
-            "raw_data": insights,
-            "sources": insights["sources"],
-            "relevance_score": {"overall": 0.8},
-            "tags": ["automated", "scheduled"],
-            "expires_at": (datetime.utcnow() + timedelta(days=7)).isoformat()
-        }
-        
-        await self.db_client.insert("research", research_entry)
+        try:
+            research_entry = {
+                "initiative_id": self.config.initiative_id,
+                "research_type": "comprehensive",
+                "topic": "automated_research",
+                "summary": insights["summary"],
+                "insights": insights["key_findings"],
+                "raw_data": insights,
+                "sources": insights["sources"],
+                "relevance_score": {"overall": 0.8},
+                "tags": ["automated", "perplexity"],
+                "expires_at": (datetime.utcnow() + timedelta(days=7)).isoformat()
+            }
+            
+            await self.db_client.insert("research", research_entry)
+            logger.info("✓ Research stored in database")
+            
+        except Exception as e:
+            logger.error(f"Failed to store research: {e}")
     
     def validate_output(self, output: Any) -> bool:
         """Validate research output"""
@@ -259,7 +482,4 @@ class ResearchAgent(BaseAgent):
             return False
         
         required_fields = ["summary", "key_findings", "recommended_hashtags"]
-        if not all(field in output for field in required_fields):
-            return False
-        
-        return True
+        return all(field in output for field in required_fields)

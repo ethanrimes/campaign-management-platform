@@ -19,15 +19,13 @@ logger = logging.getLogger(__name__)
 class TokenManager:
     """Manages encrypted token retrieval and decryption for agents"""
     
-    def __init__(self, tenant_id: str, initiative_id: str):
+    def __init__(self, initiative_id: str):
         """
         Initialize token manager for a specific initiative
         
         Args:
-            tenant_id: Tenant identifier
             initiative_id: Initiative identifier
         """
-        self.tenant_id = tenant_id
         self.initiative_id = initiative_id
         self.encryption = TokenEncryption()
         self._tokens_cache = None
@@ -155,7 +153,7 @@ class TokenManager:
         try:
             result = self.client.table("initiative_tokens").select("*").eq(
                 "initiative_id", self.initiative_id
-            ).eq("tenant_id", self.tenant_id).execute()
+            ).execute()
             
             if not result.data or len(result.data) == 0:
                 raise ValueError(f"No tokens found for initiative {self.initiative_id}")
@@ -212,8 +210,8 @@ class TokenManager:
 class TokenContext:
     """Context manager for temporary token usage"""
     
-    def __init__(self, tenant_id: str, initiative_id: str):
-        self.manager = TokenManager(tenant_id, initiative_id)
+    def __init__(self, initiative_id: str):
+        self.manager = TokenManager(initiative_id)
         self.tokens = None
     
     async def __aenter__(self):
