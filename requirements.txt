@@ -13,6 +13,7 @@ psycopg2-binary
 langchain
 langchain-openai
 openai
+google-genai
 
 # Social Media APIs
 facebook-sdk
@@ -36,6 +37,7 @@ tenacity
 pytest
 pytest-asyncio
 pytest-cov
+aiohttp
 
 # Development
 black

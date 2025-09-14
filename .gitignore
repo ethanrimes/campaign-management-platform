@@ -3,7 +3,10 @@ venv/
 .claude
 test_outputs
 test_outputs/
-
+schema.sql
+.gitignore
+supabase
+supabase/
 
 
 # Byte-compiled / optimized / DLL files
