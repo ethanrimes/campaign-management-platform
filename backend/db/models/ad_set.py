@@ -1,54 +1,114 @@
 # backend/db/models/ad_set.py
 
-from pydantic import BaseModel, Field
+from decimal import Decimal
+from pydantic import Field
+from pydantic import UUID4
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+import datetime
 from uuid import uuid4
+from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUpdate
 
 
-class AdSet(BaseModel):
-    """Ad Set model"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    initiative_id: str
-    campaign_id: str
+class AdSetsBaseSchema(CustomModel):
+    """AdSets Base Schema."""
     
-    # Ad Set Details
+    # Primary Keys
+    id: UUID4
+    
+    # Columns
+    bid_strategy: Optional[str] = Field(default=None)
+    campaign_id: UUID4
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    creative_brief: Optional[Dict[str, Any]] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    end_time: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: UUID4
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    materials: Optional[Dict[str, Any]] = Field(default=None)
+    meta_ad_set_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
     name: str
-    objective: Optional[str] = None
+    objective: Optional[str] = Field(default=None)
+    placements: Optional[Dict[str, Any]] = Field(default=None)
+    post_frequency: Optional[int] = Field(default=None)
+    post_volume: Optional[int] = Field(default=None)
+    schedule: Optional[Dict[str, Any]] = Field(default=None)
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_time: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    target_audience: Optional[Dict[str, Any]] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class AdSetsInsert(CustomModelInsert):
+    """AdSets Insert Schema."""
     
-    # Targeting
-    target_audience: Optional[Dict[str, Any]] = None  # Age, geo, interests, custom segments
-    placements: Optional[List[str]] = None  # ["ig_feed", "ig_reels", "fb_stories"]
+    # Primary Keys (optional for insert)
+    id: Optional[UUID4] = Field(default_factory=uuid4)
     
-    # Budget & Schedule
-    daily_budget: Optional[float] = None
-    lifetime_budget: Optional[float] = None
-    spent_budget: float = 0.0
-    bid_strategy: Optional[str] = None
+    # Required fields
+    campaign_id: UUID4
+    initiative_id: UUID4
+    name: str
     
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    schedule: Optional[Dict[str, Any]] = None  # Dayparting info
+    # Optional fields
+    bid_strategy: Optional[str] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    creative_brief: Optional[Dict[str, Any]] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    end_time: Optional[datetime.datetime] = Field(default=None)
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    materials: Optional[Dict[str, Any]] = Field(default=None)
+    meta_ad_set_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
+    objective: Optional[str] = Field(default=None)
+    placements: Optional[Dict[str, Any]] = Field(default=None)
+    post_frequency: Optional[int] = Field(default=None)
+    post_volume: Optional[int] = Field(default=None)
+    schedule: Optional[Dict[str, Any]] = Field(default=None)
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_time: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    target_audience: Optional[Dict[str, Any]] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class AdSetsUpdate(CustomModelUpdate):
+    """AdSets Update Schema."""
     
-    # Content Strategy
-    post_frequency: Optional[int] = None  # Posts per week
-    post_volume: Optional[int] = None  # Total active posts
-    creative_brief: Optional[Dict[str, Any]] = None  # Theme, tone, format hints
-    materials: Optional[Dict[str, Any]] = None  # Links, hashtags, assets
-    
-    # Status
-    status: str = "draft"  # draft, active, paused
-    is_active: bool = True
-    
-    # Performance
-    metrics: Optional[Dict[str, Any]] = None
-    
-    # Meta Ad Set ID
-    meta_ad_set_id: Optional[str] = None
-    
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    class Config:
-        from_attributes = True
+    # All fields optional for update
+    id: Optional[UUID4] = Field(default=None)
+    bid_strategy: Optional[str] = Field(default=None)
+    campaign_id: Optional[UUID4] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    creative_brief: Optional[Dict[str, Any]] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    end_time: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: Optional[UUID4] = Field(default=None)
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    materials: Optional[Dict[str, Any]] = Field(default=None)
+    meta_ad_set_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
+    name: Optional[str] = Field(default=None)
+    objective: Optional[str] = Field(default=None)
+    placements: Optional[Dict[str, Any]] = Field(default=None)
+    post_frequency: Optional[int] = Field(default=None)
+    post_volume: Optional[int] = Field(default=None)
+    schedule: Optional[Dict[str, Any]] = Field(default=None)
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_time: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    target_audience: Optional[Dict[str, Any]] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class AdSets(AdSetsBaseSchema):
+    """AdSets Schema for Pydantic."""
+    pass
+
+
+# Alias for backward compatibility
+AdSet = AdSets

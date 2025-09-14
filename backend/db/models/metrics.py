@@ -1,41 +1,92 @@
 # backend/db/models/metrics.py
 
-from pydantic import BaseModel, Field
+from decimal import Decimal
+from pydantic import Field
+from pydantic import UUID4
 from typing import Optional, Dict, Any
-from datetime import datetime
+import datetime
 from uuid import uuid4
+from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUpdate
 
 
-class Metrics(BaseModel):
-    """Performance metrics model"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    initiative_id: str
-    entity_type: str  # campaign, ad_set, post
-    entity_id: str
+class MetricsBaseSchema(CustomModel):
+    """Metrics Base Schema."""
     
-    # Metrics
-    impressions: int = 0
-    reach: int = 0
-    engagement: int = 0
-    clicks: int = 0
-    conversions: int = 0
-    spend: float = 0.0
+    # Primary Keys
+    id: UUID4
     
-    # Calculated metrics
-    ctr: Optional[float] = None  # Click-through rate
-    cpc: Optional[float] = None  # Cost per click
-    cpm: Optional[float] = None  # Cost per mille
-    engagement_rate: Optional[float] = None
+    # Columns
+    clicks: Optional[int] = Field(default=None)
+    conversions: Optional[int] = Field(default=None)
+    cpc: Optional[Decimal] = Field(default=None)
+    cpm: Optional[Decimal] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    ctr: Optional[Decimal] = Field(default=None)
+    engagement: Optional[int] = Field(default=None)
+    engagement_rate: Optional[Decimal] = Field(default=None)
+    entity_id: UUID4
+    entity_type: str
+    impressions: Optional[int] = Field(default=None)
+    initiative_id: UUID4
+    period_end: datetime.datetime
+    period_start: datetime.datetime
+    raw_metrics: Optional[Dict[str, Any]] = Field(default=None)
+    reach: Optional[int] = Field(default=None)
+    spend: Optional[Decimal] = Field(default=None)
+
+
+class MetricsInsert(CustomModelInsert):
+    """Metrics Insert Schema."""
     
-    # Time period
-    period_start: datetime
-    period_end: datetime
+    # Primary Keys (optional for insert)
+    id: Optional[UUID4] = Field(default_factory=uuid4)
     
-    # Raw data
-    raw_metrics: Optional[Dict[str, Any]] = None
+    # Required fields
+    entity_id: UUID4
+    entity_type: str
+    initiative_id: UUID4
+    period_end: datetime.datetime
+    period_start: datetime.datetime
     
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Optional fields
+    clicks: Optional[int] = Field(default=None)
+    conversions: Optional[int] = Field(default=None)
+    cpc: Optional[Decimal] = Field(default=None)
+    cpm: Optional[Decimal] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    ctr: Optional[Decimal] = Field(default=None)
+    engagement: Optional[int] = Field(default=None)
+    engagement_rate: Optional[Decimal] = Field(default=None)
+    impressions: Optional[int] = Field(default=None)
+    raw_metrics: Optional[Dict[str, Any]] = Field(default=None)
+    reach: Optional[int] = Field(default=None)
+    spend: Optional[Decimal] = Field(default=None)
+
+
+class MetricsUpdate(CustomModelUpdate):
+    """Metrics Update Schema."""
     
-    class Config:
-        from_attributes = True
+    # All fields optional for update
+    id: Optional[UUID4] = Field(default=None)
+    clicks: Optional[int] = Field(default=None)
+    conversions: Optional[int] = Field(default=None)
+    cpc: Optional[Decimal] = Field(default=None)
+    cpm: Optional[Decimal] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    ctr: Optional[Decimal] = Field(default=None)
+    engagement: Optional[int] = Field(default=None)
+    engagement_rate: Optional[Decimal] = Field(default=None)
+    entity_id: Optional[UUID4] = Field(default=None)
+    entity_type: Optional[str] = Field(default=None)
+    impressions: Optional[int] = Field(default=None)
+    initiative_id: Optional[UUID4] = Field(default=None)
+    period_end: Optional[datetime.datetime] = Field(default=None)
+    period_start: Optional[datetime.datetime] = Field(default=None)
+    raw_metrics: Optional[Dict[str, Any]] = Field(default=None)
+    reach: Optional[int] = Field(default=None)
+    spend: Optional[Decimal] = Field(default=None)
+
+
+class Metrics(MetricsBaseSchema):
+    """Metrics Schema for Pydantic."""
+    pass

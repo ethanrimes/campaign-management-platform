@@ -1,4 +1,4 @@
-# tools/search/perplexity_search.py
+# agents/researcher/tools/perplexity_search.py
 
 import os
 import httpx

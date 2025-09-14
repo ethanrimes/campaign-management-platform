@@ -1,44 +1,93 @@
 # backend/db/models/campaign.py
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from decimal import Decimal
+from pydantic import Field
+from pydantic import UUID4
+from typing import Optional, Dict, Any
+import datetime
 from uuid import uuid4
+from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUpdate
 
 
-class Campaign(BaseModel):
-    """Campaign model"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    initiative_id: str
+class CampaignsBaseSchema(CustomModel):
+    """Campaigns Base Schema."""
     
-    # Campaign Details
+    # Primary Keys
+    id: UUID4
+    
+    # Columns
+    budget_mode: Optional[str] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    end_date: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: UUID4
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    meta_campaign_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
     name: str
-    objective: str  # AWARENESS, ENGAGEMENT, TRAFFIC, CONVERSIONS
-    description: Optional[str] = None
+    objective: str
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_date: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class CampaignsInsert(CustomModelInsert):
+    """Campaigns Insert Schema."""
     
-    # Budget
-    budget_mode: Optional[str] = None  # campaign_level, ad_set_level
-    daily_budget: Optional[float] = None
-    lifetime_budget: Optional[float] = None
-    spent_budget: float = 0.0
+    # Primary Keys (optional for insert)
+    id: Optional[UUID4] = Field(default_factory=uuid4)
     
-    # Schedule
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    # Required fields
+    initiative_id: UUID4
+    name: str
+    objective: str
     
-    # Status
-    status: str = "draft"  # draft, active, paused, completed
-    is_active: bool = True
+    # Optional fields
+    budget_mode: Optional[str] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    end_date: Optional[datetime.datetime] = Field(default=None)
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    meta_campaign_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_date: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class CampaignsUpdate(CustomModelUpdate):
+    """Campaigns Update Schema."""
     
-    # Performance
-    metrics: Optional[Dict[str, Any]] = None  # Current performance metrics
-    
-    # Meta Campaign ID
-    meta_campaign_id: Optional[str] = None  # Facebook/Instagram campaign ID
-    
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    class Config:
-        from_attributes = True
+    # All fields optional for update
+    id: Optional[UUID4] = Field(default=None)
+    budget_mode: Optional[str] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    daily_budget: Optional[Decimal] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    end_date: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: Optional[UUID4] = Field(default=None)
+    is_active: Optional[bool] = Field(default=None)
+    lifetime_budget: Optional[Decimal] = Field(default=None)
+    meta_campaign_id: Optional[str] = Field(default=None)
+    metrics: Optional[Dict[str, Any]] = Field(default=None)
+    name: Optional[str] = Field(default=None)
+    objective: Optional[str] = Field(default=None)
+    spent_budget: Optional[Decimal] = Field(default=None)
+    start_date: Optional[datetime.datetime] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    updated_at: Optional[datetime.datetime] = Field(default=None)
+
+
+class Campaigns(CampaignsBaseSchema):
+    """Campaigns Schema for Pydantic."""
+    pass
+
+
+# Alias for backward compatibility
+Campaign = Campaigns

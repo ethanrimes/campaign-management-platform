@@ -1,4 +1,4 @@
-# tools/search/instagram_search.py
+# agents/researcher/tools/instagram_search.py
 
 import httpx
 from typing import List, Dict, Any, Optional

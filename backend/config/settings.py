@@ -1,4 +1,4 @@
-# backend/config/settings.py (Updated version with encryption)
+# backend/config/settings.py (Updated with Wavespeed)
 
 from pydantic_settings import BaseSettings
 from pydantic import BaseModel, Field
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "Campaign Management Platform"
-    APP_VERSION: str = "2.0.0"  # Updated for token encryption feature
+    APP_VERSION: str = "2.1.0"  # Updated for Wavespeed integration
     DEBUG: bool = False
     
     # Database
@@ -39,15 +39,14 @@ class Settings(BaseSettings):
     # Encryption
     ENCRYPTION_KEY: Optional[str] = None  # Key for encrypting tokens
     
-    # API Keys (loaded from environment) - for development/testing only
-    # Production tokens should be stored encrypted in database
+    # API Keys (loaded from environment)
     OPENAI_API_KEY: Optional[str] = None
     GROK_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     PERPLEXITY_API_KEY: Optional[str] = None
+    WAVESPEED_API_KEY: Optional[str] = None  # Added Wavespeed API key
     
-    # Meta (Facebook/Instagram) API - App-level credentials only
-    # Page/User specific tokens are stored encrypted in database
+    # Meta (Facebook/Instagram) API
     META_APP_ID: str
     META_APP_SECRET: str
     
@@ -75,36 +74,41 @@ class Settings(BaseSettings):
     # Default Model Configuration
     DEFAULT_MODEL_PROVIDER: ModelProvider = ModelProvider.OPENAI
     
+    # Media Generation Configuration
+    WAVESPEED_IMAGE_MODEL: str = "stability-ai/sdxl-lora"
+    WAVESPEED_VIDEO_MODEL: str = "wavespeed-ai/wan-2.2/i2v-5b-720p"
+    WAVESPEED_API_BASE: str = "https://api.wavespeed.ai/api/v3"
+    WAVESPEED_POLLING_INTERVAL: float = 2.0  # seconds between polls
+    WAVESPEED_MAX_POLL_ATTEMPTS: int = 60  # max attempts before timeout
+    
     # Budget Configuration
     DEFAULT_DAILY_BUDGET: float = 100.0
     DEFAULT_CAMPAIGN_BUDGET: float = 1000.0
-    BUDGET_WARNING_THRESHOLD: float = 0.8  # Warn when 80% spent
+    BUDGET_WARNING_THRESHOLD: float = 0.8
     
     # Scheduling
-    ORCHESTRATOR_SCHEDULE: str = "0 */6 * * *"  # Every 6 hours
-    CONTENT_CREATOR_SCHEDULE: str = "0 */4 * * *"  # Every 4 hours
-    RESEARCHER_SCHEDULE: str = "0 0 * * *"  # Daily at midnight
-    METRICS_COLLECTOR_SCHEDULE: str = "0 * * * *"  # Every hour
+    ORCHESTRATOR_SCHEDULE: str = "0 */6 * * *"
+    CONTENT_CREATOR_SCHEDULE: str = "0 */4 * * *"
+    RESEARCHER_SCHEDULE: str = "0 0 * * *"
+    METRICS_COLLECTOR_SCHEDULE: str = "0 * * * *"
     
     # Content Generation
     MAX_HASHTAGS: int = 30
-    MAX_POST_LENGTH: int = 2200  # Instagram caption limit
-    IMAGE_GENERATION_MODEL: str = "dalle-3"
-    VIDEO_GENERATION_MODEL: str = "runway-ml"
+    MAX_POST_LENGTH: int = 2200
     
     # Rate Limiting
-    API_RATE_LIMIT: int = 100  # requests per minute
-    CONTENT_GENERATION_LIMIT: int = 50  # posts per day
+    API_RATE_LIMIT: int = 100
+    CONTENT_GENERATION_LIMIT: int = 50
     
     # Security
-    TOKEN_CACHE_DURATION: int = 3600  # Cache decrypted tokens for 1 hour
-    REQUIRE_ENCRYPTED_TOKENS: bool = True  # Enforce encrypted token storage
+    TOKEN_CACHE_DURATION: int = 3600
+    REQUIRE_ENCRYPTED_TOKENS: bool = True
     
     # Paths
     PROMPTS_DIR: str = "agents/*/prompts"
     INITIATIVES_DIR: str = "initiatives"
     ASSETS_DIR: str = "assets"
-    CREDENTIALS_DIR: str = "credentials"  # For storing initiative credentials
+    CREDENTIALS_DIR: str = "credentials"
     
     class Config:
         env_file = ".env"

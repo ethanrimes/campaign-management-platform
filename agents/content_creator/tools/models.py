@@ -87,7 +87,7 @@ class InstagramImageInput(SocialMediaPostInput):
         ...,
         min_length=1,
         max_length=10,
-        description="Prompts for Gemini Imagen 3 to generate images (1-10 for carousel)"
+        description="Prompts for Wavespeed SDXL-LoRA to generate images (1-10 for carousel)"
     )
     is_carousel: bool = Field(
         default=False,
@@ -110,7 +110,7 @@ class InstagramReelInput(SocialMediaPostInput):
         ...,
         min_length=10,
         max_length=500,
-        description="Prompt for Gemini Veo 3 to generate video content"
+        description="Prompt for Wavespeed WAN-2.2 to generate video content (requires input image)"
     )
     duration_seconds: int = Field(
         default=15,
@@ -120,7 +120,11 @@ class InstagramReelInput(SocialMediaPostInput):
     )
     cover_image_prompt: Optional[str] = Field(
         None,
-        description="Optional prompt for cover image generation"
+        description="Optional prompt for cover image generation with SDXL-LoRA"
+    )
+    input_image_prompt: Optional[str] = Field(
+        None,
+        description="Optional prompt to generate input image for video (if not using cover image)"
     )
 
 
@@ -134,12 +138,12 @@ class FacebookTextLinkInput(SocialMediaPostInput):
     link_preview_title: Optional[str] = Field(
         None,
         max_length=100,
-        description="Custom title for link preview"
+        description="Custom title for link preview (Note: may be restricted by Meta API)"
     )
     link_preview_description: Optional[str] = Field(
         None,
         max_length=200,
-        description="Custom description for link preview"
+        description="Custom description for link preview (Note: may be restricted by Meta API)"
     )
 
 
@@ -149,7 +153,7 @@ class FacebookImageInput(SocialMediaPostInput):
         ...,
         min_length=1,
         max_length=10,
-        description="Prompts for image generation (1 for single, 2-10 for album)"
+        description="Prompts for Wavespeed SDXL-LoRA image generation (1 for single, 2-10 for album)"
     )
     is_album: bool = Field(
         default=False,
@@ -163,7 +167,7 @@ class FacebookVideoInput(SocialMediaPostInput):
         ...,
         min_length=10,
         max_length=500,
-        description="Prompt for video generation"
+        description="Prompt for Wavespeed WAN-2.2 video generation"
     )
     duration_seconds: int = Field(
         default=30,
@@ -176,6 +180,10 @@ class FacebookVideoInput(SocialMediaPostInput):
         max_length=100,
         description="Video title for Facebook"
     )
+    input_image_prompt: Optional[str] = Field(
+        None,
+        description="Optional prompt to generate input image for video with SDXL-LoRA"
+    )
 
 
 class MediaFile(BaseModel):
@@ -187,6 +195,14 @@ class MediaFile(BaseModel):
     dimensions: Optional[Dict[str, int]] = None  # width, height
     duration_seconds: Optional[int] = None  # For videos
     file_size_bytes: Optional[int] = None
+    generation_model: Optional[str] = Field(
+        None,
+        description="Model used for generation (e.g., stability-ai/sdxl-lora, wavespeed-ai/wan-2.2/i2v-5b-720p)"
+    )
+    wavespeed_url: Optional[str] = Field(
+        None,
+        description="Original Wavespeed CDN URL before upload to Supabase"
+    )
 
 
 class PostResponse(BaseModel):
@@ -224,6 +240,10 @@ class PostResponse(BaseModel):
         default_factory=dict,
         description="Additional response metadata"
     )
+    generation_time_seconds: Optional[float] = Field(
+        None,
+        description="Time taken for media generation in seconds"
+    )
     
     model_config = ConfigDict(
         json_schema_extra={
@@ -234,11 +254,14 @@ class PostResponse(BaseModel):
                 "status": "published",
                 "media_files": [{
                     "file_type": "image",
-                    "supabase_path": "generated-media/bf2d.../images/img_001.jpg",
+                    "supabase_path": "generated-media/bf2d.../images/img_001.png",
                     "public_url": "https://storage.supabase.co/...",
-                    "prompt_used": "A beautiful sunset over mountains"
+                    "prompt_used": "A beautiful sunset over mountains",
+                    "generation_model": "stability-ai/sdxl-lora",
+                    "wavespeed_url": "https://d1q70pf5vjeyhc.cloudfront.net/predictions/..."
                 }],
-                "platform": "instagram"
+                "platform": "instagram",
+                "generation_time_seconds": 15.3
             }
         }
     )
@@ -256,11 +279,15 @@ class BatchPostRequest(BaseModel):
     )
     media_prompts: List[str] = Field(
         default_factory=list,
-        description="Media generation prompts"
+        description="Media generation prompts for Wavespeed"
     )
     media_type: MediaType = Field(
         MediaType.IMAGE,
         description="Type of media to generate and post"
+    )
+    wavespeed_params: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional Wavespeed-specific generation parameters"
     )
 
 
@@ -274,4 +301,35 @@ class BatchPostResponse(BaseModel):
     )
     total_failed: int = Field(
         description="Number of failed posts"
+    )
+    total_generation_time_seconds: Optional[float] = Field(
+        None,
+        description="Total time spent on media generation"
+    )
+
+
+class WavespeedGenerationParams(BaseModel):
+    """Parameters specific to Wavespeed generation"""
+    guidance_scale: float = Field(
+        default=7.5,
+        ge=1.0,
+        le=20.0,
+        description="Guidance scale for SDXL-LoRA generation"
+    )
+    num_inference_steps: int = Field(
+        default=30,
+        ge=1,
+        le=50,
+        description="Number of inference steps for image generation"
+    )
+    seed: int = Field(
+        default=-1,
+        ge=-1,
+        le=2147483647,
+        description="Random seed (-1 for random)"
+    )
+    loras: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        max_length=4,
+        description="LoRA configurations for SDXL (max 4)"
     )

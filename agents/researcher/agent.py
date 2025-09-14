@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 from agents.base.agent import BaseAgent, AgentConfig, AgentOutput
-from tools.search.perplexity_search import PerplexitySearch
+from agents.researcher.tools.perplexity_search import PerplexitySearch  # Updated import path
 from backend.db.supabase_client import DatabaseClient
 import json
 import uuid

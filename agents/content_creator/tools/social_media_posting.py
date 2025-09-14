@@ -258,7 +258,7 @@ class InstagramReelPostTool(BaseTool):
         caption: str,
         tags: List[str],
         video_prompt: str,
-        duration_seconds: int = 15,
+        duration_seconds: int = 5,
         cover_image_prompt: Optional[str] = None,
         metadata: Dict[str, Any] = {},
         run_manager: Optional[CallbackManagerForToolRun] = None
@@ -422,8 +422,8 @@ class FacebookTextLinkPostTool(BaseTool):
         caption: str,
         tags: List[str],
         link_url: str,
-        link_preview_title: Optional[str] = None,
-        link_preview_description: Optional[str] = None,
+        link_preview_title: Optional[str] = None, # Parameter is kept for schema compatibility
+        link_preview_description: Optional[str] = None, # Parameter is kept for schema compatibility
         metadata: Dict[str, Any] = {},
         run_manager: Optional[CallbackManagerForToolRun] = None
     ) -> PostResponse:
@@ -446,11 +446,8 @@ class FacebookTextLinkPostTool(BaseTool):
                     "link": link_url
                 }
                 
-                # Add custom preview if provided
-                if link_preview_title:
-                    data["name"] = link_preview_title
-                if link_preview_description:
-                    data["description"] = link_preview_description
+                # FIX: REMOVED custom preview parameters as they are restricted.
+                # Facebook will generate the preview from the link's metadata.
                 
                 result = await client.post(url, data)
                 
@@ -628,7 +625,7 @@ class FacebookVideoPostTool(BaseTool):
         caption: str,
         tags: List[str],
         video_prompt: str,
-        duration_seconds: int = 30,
+        duration_seconds: int = 5,
         video_title: Optional[str] = None,
         metadata: Dict[str, Any] = {},
         run_manager: Optional[CallbackManagerForToolRun] = None

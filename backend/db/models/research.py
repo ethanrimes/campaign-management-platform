@@ -1,37 +1,76 @@
 # backend/db/models/research.py
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pydantic import UUID4
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+import datetime
 from uuid import uuid4
+from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUpdate
 
 
-class Research(BaseModel):
-    """Research data model"""
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    initiative_id: str
-    initiative_id: str
+class ResearchBaseSchema(CustomModel):
+    """Research Base Schema."""
     
-    # Research Details
-    research_type: str  # competitor, trend, hashtag, audience
+    # Primary Keys
+    id: UUID4
+    
+    # Columns
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    expires_at: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: UUID4
+    insights: Optional[List[Dict[str, Any]]] = Field(default=None)
+    raw_data: Optional[Dict[str, Any]] = Field(default=None)
+    relevance_score: Optional[Dict[str, Any]] = Field(default=None)
+    research_type: str
+    search_queries: Optional[List[str]] = Field(default=None)
+    sources: Optional[List[str]] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    tags: Optional[List[str]] = Field(default=None)
+    topic: str
+
+
+class ResearchInsert(CustomModelInsert):
+    """Research Insert Schema."""
+    
+    # Primary Keys (optional for insert)
+    id: Optional[UUID4] = Field(default_factory=uuid4)
+    
+    # Required fields
+    initiative_id: UUID4
+    research_type: str
     topic: str
     
-    # Content
-    summary: Optional[str] = None
-    insights: Optional[List[Dict[str, Any]]] = None  # Structured insights
-    raw_data: Optional[Dict[str, Any]] = None  # Raw search results
+    # Optional fields
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    expires_at: Optional[datetime.datetime] = Field(default=None)
+    insights: Optional[List[Dict[str, Any]]] = Field(default=None)
+    raw_data: Optional[Dict[str, Any]] = Field(default=None)
+    relevance_score: Optional[Dict[str, Any]] = Field(default=None)
+    search_queries: Optional[List[str]] = Field(default=None)
+    sources: Optional[List[str]] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    tags: Optional[List[str]] = Field(default=None)
+
+
+class ResearchUpdate(CustomModelUpdate):
+    """Research Update Schema."""
     
-    # Sources
-    sources: Optional[List[str]] = None  # List of URLs and references
-    search_queries: Optional[List[str]] = None  # Queries used
-    
-    # Relevance
-    relevance_score: Optional[Dict[str, Any]] = None  # Scoring for different aspects
-    tags: Optional[List[str]] = None  # Categorization tags
-    
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    expires_at: Optional[datetime] = None  # When research becomes stale
-    
-    class Config:
-        from_attributes = True
+    # All fields optional for update
+    id: Optional[UUID4] = Field(default=None)
+    created_at: Optional[datetime.datetime] = Field(default=None)
+    expires_at: Optional[datetime.datetime] = Field(default=None)
+    initiative_id: Optional[UUID4] = Field(default=None)
+    insights: Optional[List[Dict[str, Any]]] = Field(default=None)
+    raw_data: Optional[Dict[str, Any]] = Field(default=None)
+    relevance_score: Optional[Dict[str, Any]] = Field(default=None)
+    research_type: Optional[str] = Field(default=None)
+    search_queries: Optional[List[str]] = Field(default=None)
+    sources: Optional[List[str]] = Field(default=None)
+    summary: Optional[str] = Field(default=None)
+    tags: Optional[List[str]] = Field(default=None)
+    topic: Optional[str] = Field(default=None)
+
+
+class Research(ResearchBaseSchema):
+    """Research Schema for Pydantic."""
+    pass
