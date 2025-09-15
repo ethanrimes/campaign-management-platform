@@ -251,6 +251,9 @@ class ContentCreatorAgent(BaseAgent):
     
     async def _save_posts(self, posts: List[Dict[str, Any]], ad_set_id: str):
         """Save generated posts to database"""
+        execution_id = getattr(self, 'execution_id', None)
+        execution_step = getattr(self, 'execution_step', 'Content Creation')
+        
         for post in posts:
             post_entry = {
                 "initiative_id": self.config.initiative_id,
@@ -265,10 +268,16 @@ class ContentCreatorAgent(BaseAgent):
                 },
                 "scheduled_time": post.get("scheduled_time"),
                 "status": "draft",
-                "generation_metadata": post.get("generation_metadata", {})
+                "generation_metadata": post.get("generation_metadata", {}),
+                # Add execution tracking
+                "execution_id": execution_id,
+                "execution_step": execution_step
             }
             
             await self.db_client.insert("posts", post_entry)
+        
+        # if execution_id:
+        #     logger.info(f"Posts saved with execution_id: {execution_id}")
     
     def validate_output(self, output: Any) -> bool:
         """Validate content creator output"""

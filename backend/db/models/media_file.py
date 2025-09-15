@@ -26,6 +26,8 @@ class MediaFilesBaseSchema(CustomModel):
     public_url: str = Field(description="Public URL for accessing the file")
     supabase_path: str = Field(description="Path in Supabase storage bucket")
     updated_at: Optional[datetime.datetime] = Field(default=None, description="Timestamp when the record was last updated")
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this")
 
 
 class MediaFilesInsert(CustomModelInsert):
@@ -48,6 +50,8 @@ class MediaFilesInsert(CustomModelInsert):
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata as JSON")
     prompt_used: Optional[str] = Field(default=None, description="AI prompt used to generate the media")
     updated_at: Optional[datetime.datetime] = Field(default=None, description="Timestamp when the record was last updated")
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this")
 
 
 class MediaFilesUpdate(CustomModelUpdate):
@@ -66,6 +70,8 @@ class MediaFilesUpdate(CustomModelUpdate):
     public_url: Optional[str] = Field(default=None, description="Public URL for accessing the file")
     supabase_path: Optional[str] = Field(default=None, description="Path in Supabase storage bucket")
     updated_at: Optional[datetime.datetime] = Field(default=None, description="Timestamp when the record was last updated")
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this")
 
 
 class MediaFiles(MediaFilesBaseSchema):

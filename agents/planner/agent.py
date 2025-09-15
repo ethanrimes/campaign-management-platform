@@ -332,6 +332,12 @@ class PlanningAgent(BaseAgent):
         """Save the campaign plan to database"""
         logger.info("\n💾 SAVING CAMPAIGN PLAN TO DATABASE...")
         
+        execution_id = getattr(self, 'execution_id', None)
+        execution_step = getattr(self, 'execution_step', 'Planning')
+        
+        if execution_id:
+            logger.info(f"Using execution_id: {execution_id}")
+        
         # Save plan metadata
         plan_entry = {
             "initiative_id": self.config.initiative_id,
@@ -364,11 +370,17 @@ class PlanningAgent(BaseAgent):
                 "start_date": start_date,
                 "end_date": end_date,
                 "status": "draft",
-                "is_active": True
+                "is_active": True,
+                # Add execution tracking
+                "execution_id": execution_id,
+                "execution_metadata": {
+                    "step": execution_step,
+                    "created_at": datetime.utcnow().isoformat()
+                }
             }
             
             await self.db_client.insert("campaigns", campaign_entry)
-            logger.info(f"  ✓ Saved campaign: {campaign_data['name']}")
+            logger.info(f"  ✔ Saved campaign: {campaign_data['name']}")
             
             for ad_set_data in campaign_data.get("ad_sets", []):
                 ad_set_entry = {
@@ -385,10 +397,13 @@ class PlanningAgent(BaseAgent):
                     "post_frequency": ad_set_data.get("post_frequency"),
                     "post_volume": ad_set_data.get("post_volume"),
                     "status": "draft",
-                    "is_active": True
+                    "is_active": True,
+                    # Add execution tracking
+                    "execution_id": execution_id,
+                    "execution_step": execution_step
                 }
                 
                 await self.db_client.insert("ad_sets", ad_set_entry)
-                logger.info(f"    ✓ Saved ad set: {ad_set_data['name']}")
+                logger.info(f"    ✔ Saved ad set: {ad_set_data['name']}")
         
         logger.info("✅ Campaign plan saved successfully!")

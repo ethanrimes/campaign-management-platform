@@ -38,6 +38,8 @@ class PostsBaseSchema(CustomModel):
     status: Optional[str] = Field(default=None)
     text_content: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Content Creation)")
 
 
 class PostsInsert(CustomModelInsert):
@@ -72,6 +74,8 @@ class PostsInsert(CustomModelInsert):
     status: Optional[str] = Field(default=None)
     text_content: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Content Creation)")
 
 
 class PostsUpdate(CustomModelUpdate):
@@ -102,6 +106,8 @@ class PostsUpdate(CustomModelUpdate):
     status: Optional[str] = Field(default=None)
     text_content: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Content Creation)")
 
 
 class Posts(PostsBaseSchema):

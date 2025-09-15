@@ -10,10 +10,10 @@ from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUp
 
 class ResearchBaseSchema(CustomModel):
     """Research Base Schema."""
-    
+
     # Primary Keys
     id: UUID4
-    
+
     # Columns
     created_at: Optional[datetime.datetime] = Field(default=None)
     expires_at: Optional[datetime.datetime] = Field(default=None)
@@ -27,19 +27,21 @@ class ResearchBaseSchema(CustomModel):
     summary: Optional[str] = Field(default=None)
     tags: Optional[List[str]] = Field(default=None)
     topic: str
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Research)")
 
 
 class ResearchInsert(CustomModelInsert):
     """Research Insert Schema."""
-    
+
     # Primary Keys (optional for insert)
     id: Optional[UUID4] = Field(default_factory=uuid4)
-    
+
     # Required fields
     initiative_id: UUID4
     research_type: str
     topic: str
-    
+
     # Optional fields
     created_at: Optional[datetime.datetime] = Field(default=None)
     expires_at: Optional[datetime.datetime] = Field(default=None)
@@ -50,11 +52,13 @@ class ResearchInsert(CustomModelInsert):
     sources: Optional[List[str]] = Field(default=None)
     summary: Optional[str] = Field(default=None)
     tags: Optional[List[str]] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Research)")
 
 
 class ResearchUpdate(CustomModelUpdate):
     """Research Update Schema."""
-    
+
     # All fields optional for update
     id: Optional[UUID4] = Field(default=None)
     created_at: Optional[datetime.datetime] = Field(default=None)
@@ -69,6 +73,8 @@ class ResearchUpdate(CustomModelUpdate):
     summary: Optional[str] = Field(default=None)
     tags: Optional[List[str]] = Field(default=None)
     topic: Optional[str] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Research)")
 
 
 class Research(ResearchBaseSchema):

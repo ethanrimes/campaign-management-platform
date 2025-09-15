@@ -19,6 +19,8 @@ class AgentConfig(BaseModel):
     model_provider: str = "openai"
     llm_config: Optional[ModelConfig] = None
     verbose: bool = False
+    execution_id: Optional[str] = None
+    execution_step: Optional[str] = None
     
     class Config:
         arbitrary_types_allowed = True

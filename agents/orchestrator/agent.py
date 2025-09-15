@@ -1,7 +1,7 @@
-# agents/orchestrator/agent.py
+# agents/orchestrator/agent.py - Updated with execution tracking
 
 """
-Orchestrator Agent for workflow coordination.
+Orchestrator Agent for workflow coordination with execution tracking.
 Manages and coordinates the execution of multiple agents in defined workflows.
 """
 
@@ -37,7 +37,7 @@ class WorkflowStep:
 
 
 class OrchestratorAgent(BaseAgent):
-    """Orchestrator agent that coordinates multi-agent workflows"""
+    """Orchestrator agent that coordinates multi-agent workflows with execution tracking"""
     
     # Define workflow configurations
     WORKFLOWS = {
@@ -97,12 +97,17 @@ class OrchestratorAgent(BaseAgent):
         super().__init__(config)
         self.workflow = workflow
         self.workflow_id = str(uuid.uuid4())
+        
+        # Generate execution ID for tracking
+        self.execution_id = str(uuid.uuid4())
+        
         self.db_client = DatabaseClient(initiative_id=config.initiative_id)
         
         if workflow not in self.WORKFLOWS:
             raise ValueError(f"Unknown workflow: {workflow}. Available: {list(self.WORKFLOWS.keys())}")
         
         logger.info(f"Orchestrator initialized with workflow: {workflow}")
+        logger.info(f"Execution ID: {self.execution_id}")
         
     def _initialize_tools(self) -> List[Any]:
         """Initialize orchestrator tools"""
@@ -114,18 +119,56 @@ class OrchestratorAgent(BaseAgent):
         to complete complex workflows. Your role is to manage the flow of information between agents,
         ensure proper sequencing, and handle error recovery."""
     
+    async def _create_execution_log(self) -> None:
+        """Create execution log entry in database"""
+        try:
+            execution_log = {
+                "execution_id": self.execution_id,
+                "initiative_id": self.config.initiative_id,
+                "workflow_type": self.workflow,
+                "status": "running",
+                "started_at": datetime.utcnow().isoformat(),
+                "metadata": {
+                    "workflow_id": self.workflow_id,
+                    "agent_id": self.agent_id
+                }
+            }
+            
+            await self.db_client.insert("execution_logs", execution_log)
+            logger.info(f"Created execution log: {self.execution_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create execution log: {e}")
+            # Continue execution even if logging fails
+    
+    async def _update_execution_log(self, updates: Dict[str, Any]) -> None:
+        """Update execution log entry"""
+        try:
+            await self.db_client.update(
+                "execution_logs",
+                updates,
+                filters={"execution_id": self.execution_id}
+            )
+        except Exception as e:
+            logger.error(f"Failed to update execution log: {e}")
+    
     async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the configured workflow"""
+        """Execute the configured workflow with execution tracking"""
         logger.info("\n" + "="*80)
         logger.info(f"ORCHESTRATOR: EXECUTING WORKFLOW '{self.workflow}'")
         logger.info(f"Workflow ID: {self.workflow_id}")
+        logger.info(f"Execution ID: {self.execution_id}")
         logger.info(f"Initiative ID: {self.config.initiative_id}")
         logger.info("="*80)
+        
+        # Create execution log entry
+        await self._create_execution_log()
         
         workflow_steps = self.WORKFLOWS[self.workflow]
         results = {}
         workflow_metadata = {
             "workflow_id": self.workflow_id,
+            "execution_id": self.execution_id,
             "workflow_type": self.workflow,
             "initiative_id": self.config.initiative_id,
             "started_at": datetime.utcnow().isoformat(),
@@ -140,7 +183,7 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"{'='*60}")
             
             try:
-                # Create agent configuration
+                # Create agent configuration with execution tracking
                 agent_config = AgentConfig(
                     name=f"{step.name} Agent",
                     description=f"Agent for {step.name}",
@@ -150,15 +193,24 @@ class OrchestratorAgent(BaseAgent):
                     verbose=self.config.verbose
                 )
                 
+                # Add execution tracking to agent config
+                agent_config.execution_id = self.execution_id
+                agent_config.execution_step = step.name
+                
                 # Instantiate the agent
                 agent = step.agent_class(agent_config)
+                
+                # Pass execution ID to the agent
+                agent.execution_id = self.execution_id
+                agent.execution_step = step.name
                 
                 # Transform input based on previous results
                 step_input = step.input_transformer(input_data, results)
                 
-                # Add workflow context to input
+                # Add workflow and execution context to input
                 step_input["workflow_context"] = {
                     "workflow_id": self.workflow_id,
+                    "execution_id": self.execution_id,
                     "workflow_type": self.workflow,
                     "current_step": step.name,
                     "step_number": i,
@@ -166,7 +218,7 @@ class OrchestratorAgent(BaseAgent):
                     "previous_results_available": list(results.keys())
                 }
                 
-                logger.info(f"Executing {step.name} agent...")
+                logger.info(f"Executing {step.name} agent with execution_id: {self.execution_id}")
                 
                 # Execute the agent
                 agent_result = await agent.execute(step_input)
@@ -178,10 +230,22 @@ class OrchestratorAgent(BaseAgent):
                     # Save intermediate results to database
                     await self._save_step_result(step.name, agent_result.data)
                     
+                    # Update execution log
+                    await self._update_execution_log({
+                        "steps_completed": workflow_metadata["steps_completed"],
+                        "metadata": workflow_metadata
+                    })
+                    
                     logger.info(f"✅ {step.name} completed successfully")
                 else:
                     workflow_metadata["steps_failed"].append(step.name)
                     logger.error(f"❌ {step.name} failed: {agent_result.errors}")
+                    
+                    # Update execution log with failure
+                    await self._update_execution_log({
+                        "steps_failed": workflow_metadata["steps_failed"],
+                        "error_messages": {step.name: agent_result.errors}
+                    })
                     
                     # Decide whether to continue or abort workflow
                     if self._should_abort_on_failure(step.name):
@@ -191,6 +255,12 @@ class OrchestratorAgent(BaseAgent):
             except Exception as e:
                 logger.error(f"❌ Exception in {step.name}: {e}")
                 workflow_metadata["steps_failed"].append(step.name)
+                
+                # Update execution log with exception
+                await self._update_execution_log({
+                    "steps_failed": workflow_metadata["steps_failed"],
+                    "error_messages": {step.name: str(e)}
+                })
                 
                 if self._should_abort_on_failure(step.name):
                     logger.error("Aborting workflow due to exception")
@@ -203,9 +273,19 @@ class OrchestratorAgent(BaseAgent):
         # Save workflow metadata
         await self._save_workflow_metadata(workflow_metadata)
         
+        # Update execution log to completed
+        final_status = "completed" if workflow_metadata["success"] else "failed"
+        await self._update_execution_log({
+            "status": final_status,
+            "completed_at": workflow_metadata["completed_at"],
+            "steps_completed": workflow_metadata["steps_completed"],
+            "steps_failed": workflow_metadata["steps_failed"]
+        })
+        
         # Compile final output
         output = {
             "workflow_id": self.workflow_id,
+            "execution_id": self.execution_id,
             "workflow_type": self.workflow,
             "success": workflow_metadata["success"],
             "steps_completed": workflow_metadata["steps_completed"],
@@ -219,6 +299,7 @@ class OrchestratorAgent(BaseAgent):
             logger.info(f"✅ WORKFLOW '{self.workflow}' COMPLETED SUCCESSFULLY")
         else:
             logger.info(f"⚠️ WORKFLOW '{self.workflow}' COMPLETED WITH ERRORS")
+        logger.info(f"Execution ID: {self.execution_id}")
         logger.info(f"Steps completed: {len(workflow_metadata['steps_completed'])}/{len(workflow_steps)}")
         logger.info("="*80)
         
@@ -235,15 +316,14 @@ class OrchestratorAgent(BaseAgent):
         try:
             entry = {
                 "workflow_id": self.workflow_id,
+                "execution_id": self.execution_id,
                 "initiative_id": self.config.initiative_id,
                 "step_name": step_name,
                 "result_data": result,
                 "created_at": datetime.utcnow().isoformat()
             }
             
-            # Save to a workflow_results table or appropriate location
-            # For now, we'll log it - you can implement the actual DB save
-            logger.debug(f"Saving {step_name} results to database")
+            logger.debug(f"Saving {step_name} results with execution_id: {self.execution_id}")
             
         except Exception as e:
             logger.error(f"Failed to save step result: {e}")
@@ -253,14 +333,14 @@ class OrchestratorAgent(BaseAgent):
         try:
             entry = {
                 "workflow_id": self.workflow_id,
+                "execution_id": self.execution_id,
                 "initiative_id": self.config.initiative_id,
                 "workflow_type": self.workflow,
                 "metadata": metadata,
                 "created_at": datetime.utcnow().isoformat()
             }
             
-            # Save to a workflows table or appropriate location
-            logger.debug("Saving workflow metadata to database")
+            logger.debug(f"Saving workflow metadata with execution_id: {self.execution_id}")
             
         except Exception as e:
             logger.error(f"Failed to save workflow metadata: {e}")
@@ -270,15 +350,92 @@ class OrchestratorAgent(BaseAgent):
         if not isinstance(output, dict):
             return False
         
-        required_fields = ["workflow_id", "workflow_type", "success", "results"]
+        required_fields = ["workflow_id", "execution_id", "workflow_type", "success", "results"]
         return all(field in output for field in required_fields)
     
     async def get_workflow_status(self) -> Dict[str, Any]:
         """Get the current status of the workflow execution"""
-        # This could query the database for workflow status
+        try:
+            # Query execution log for status
+            logs = await self.db_client.select(
+                "execution_logs",
+                filters={"execution_id": self.execution_id}
+            )
+            
+            if logs:
+                return logs[0]
+            
+        except Exception as e:
+            logger.error(f"Failed to get workflow status: {e}")
+        
         return {
             "workflow_id": self.workflow_id,
+            "execution_id": self.execution_id,
             "workflow_type": self.workflow,
             "initiative_id": self.config.initiative_id,
-            "status": "running"  # or "completed", "failed", etc.
+            "status": "unknown"
         }
+    
+    @staticmethod
+    async def get_execution_summary(execution_id: str, initiative_id: str) -> Dict[str, Any]:
+        """Get summary of a specific execution"""
+        db_client = DatabaseClient(initiative_id=initiative_id)
+        
+        try:
+            # Get execution log
+            logs = await db_client.select(
+                "execution_logs",
+                filters={"execution_id": execution_id}
+            )
+            
+            if not logs:
+                return {"error": "Execution not found"}
+            
+            execution_log = logs[0]
+            
+            # Get counts of created entities
+            campaigns = await db_client.select(
+                "campaigns",
+                filters={"execution_id": execution_id}
+            )
+            
+            ad_sets = await db_client.select(
+                "ad_sets",
+                filters={"execution_id": execution_id}
+            )
+            
+            posts = await db_client.select(
+                "posts",
+                filters={"execution_id": execution_id}
+            )
+            
+            research = await db_client.select(
+                "research",
+                filters={"execution_id": execution_id}
+            )
+            
+            media_files = await db_client.select(
+                "media_files",
+                filters={"execution_id": execution_id}
+            )
+            
+            return {
+                "execution_id": execution_id,
+                "workflow_type": execution_log.get("workflow_type"),
+                "status": execution_log.get("status"),
+                "started_at": execution_log.get("started_at"),
+                "completed_at": execution_log.get("completed_at"),
+                "steps_completed": execution_log.get("steps_completed", []),
+                "steps_failed": execution_log.get("steps_failed", []),
+                "entities_created": {
+                    "campaigns": len(campaigns),
+                    "ad_sets": len(ad_sets),
+                    "posts": len(posts),
+                    "research_entries": len(research),
+                    "media_files": len(media_files)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get execution summary: {e}")
+            return {"error": str(e)}

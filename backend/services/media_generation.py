@@ -235,13 +235,21 @@ class MediaGenerationService:
         try:
             logger.debug(f"Storing media metadata for {file_type}")
             db = DatabaseClient(initiative_id=str(initiative_id))
+            
+            # Extract execution_id from metadata if available
+            execution_id = metadata.get('execution_id')
+            execution_step = metadata.get('execution_step', 'Content Creation')
+            
             result = await db.insert("media_files", {
                 "initiative_id": str(initiative_id),
                 "file_type": file_type,
                 "supabase_path": supabase_path,
                 "public_url": public_url,
                 "prompt_used": metadata.get("prompt", ""),
-                "metadata": metadata
+                "metadata": metadata,
+                # Add execution tracking
+                "execution_id": execution_id,
+                "execution_step": execution_step
             })
             logger.debug(f"Metadata stored successfully: {result}")
         except Exception as e:
@@ -308,7 +316,10 @@ class ImageGenerationService(MediaGenerationService):
                                     "size": size,
                                     "model": settings.WAVESPEED_IMAGE_MODEL,
                                     "wavespeed_url": output_url,
-                                    "request_id": request_id
+                                    "request_id": request_id,
+                                    # Add execution tracking if available
+                                    "execution_id": getattr(self, 'execution_id', None),
+                                    "execution_step": getattr(self, 'execution_step', None)
                                 }
                             )
                             urls.append(public_url)

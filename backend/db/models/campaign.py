@@ -11,10 +11,10 @@ from backend.db.models.base import CustomModel, CustomModelInsert, CustomModelUp
 
 class CampaignsBaseSchema(CustomModel):
     """Campaigns Base Schema."""
-    
+
     # Primary Keys
     id: UUID4
-    
+
     # Columns
     budget_mode: Optional[str] = Field(default=None)
     created_at: Optional[datetime.datetime] = Field(default=None)
@@ -32,19 +32,21 @@ class CampaignsBaseSchema(CustomModel):
     start_date: Optional[datetime.datetime] = Field(default=None)
     status: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution that created this campaign")
+    execution_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Metadata about the execution context")
 
 
 class CampaignsInsert(CustomModelInsert):
     """Campaigns Insert Schema."""
-    
+
     # Primary Keys (optional for insert)
     id: Optional[UUID4] = Field(default_factory=uuid4)
-    
+
     # Required fields
     initiative_id: UUID4
     name: str
     objective: str
-    
+
     # Optional fields
     budget_mode: Optional[str] = Field(default=None)
     created_at: Optional[datetime.datetime] = Field(default=None)
@@ -59,11 +61,13 @@ class CampaignsInsert(CustomModelInsert):
     start_date: Optional[datetime.datetime] = Field(default=None)
     status: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution that created this campaign")
+    execution_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Metadata about the execution context")
 
 
 class CampaignsUpdate(CustomModelUpdate):
     """Campaigns Update Schema."""
-    
+
     # All fields optional for update
     id: Optional[UUID4] = Field(default=None)
     budget_mode: Optional[str] = Field(default=None)
@@ -82,6 +86,8 @@ class CampaignsUpdate(CustomModelUpdate):
     start_date: Optional[datetime.datetime] = Field(default=None)
     status: Optional[str] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution that created this campaign")
+    execution_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Metadata about the execution context")
 
 
 class Campaigns(CampaignsBaseSchema):

@@ -39,6 +39,8 @@ class AdSetsBaseSchema(CustomModel):
     status: Optional[str] = Field(default=None)
     target_audience: Optional[Dict[str, Any]] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Planning)")
 
 
 class AdSetsInsert(CustomModelInsert):
@@ -73,6 +75,8 @@ class AdSetsInsert(CustomModelInsert):
     status: Optional[str] = Field(default=None)
     target_audience: Optional[Dict[str, Any]] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Planning)")
 
 
 class AdSetsUpdate(CustomModelUpdate):
@@ -103,6 +107,8 @@ class AdSetsUpdate(CustomModelUpdate):
     status: Optional[str] = Field(default=None)
     target_audience: Optional[Dict[str, Any]] = Field(default=None)
     updated_at: Optional[datetime.datetime] = Field(default=None)
+    execution_id: Optional[UUID4] = Field(default=None, description="UUID linking to the orchestrator execution")
+    execution_step: Optional[str] = Field(default=None, description="Step in the workflow that created this (e.g., Planning)")
 
 
 class AdSets(AdSetsBaseSchema):

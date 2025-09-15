@@ -468,7 +468,9 @@ class ResearchAgent(BaseAgent):
                 "sources": insights["sources"],
                 "relevance_score": {"overall": 0.8},
                 "tags": ["automated", "perplexity"],
-                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "execution_id": getattr(self, 'execution_id', None),
+            "execution_step": getattr(self, 'execution_step', 'Research')
             }
             
             await self.db_client.insert("research", research_entry)
