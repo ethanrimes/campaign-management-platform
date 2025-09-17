@@ -20,7 +20,6 @@ async def list_initiatives(
 
 @router.get("/{initiative_id}", response_model=Initiative)
 async def get_initiative(
-    initiative_id: str,
     initiative_id: str = Depends(get_initiative_id),
     db: DatabaseClient = Depends(lambda: get_database_client(initiative_id))
 ):
@@ -42,14 +41,11 @@ async def create_initiative(
     db: DatabaseClient = Depends(lambda: get_database_client(initiative_id))
 ):
     """Create a new initiative"""
-    initiative.tenant_id = tenant_id
     result = await db.insert("initiatives", initiative.dict())
     return result
 
 @router.put("/{initiative_id}", response_model=Initiative)
 async def update_initiative(
-    initiative_id: str,
-    initiative: Initiative,
     initiative_id: str = Depends(get_initiative_id),
     db: DatabaseClient = Depends(lambda: get_database_client(initiative_id))
 ):

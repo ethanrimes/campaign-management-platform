@@ -1,4 +1,4 @@
-# backend/api/main.py
+# backend/api/main.py (Updated)
 
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +12,7 @@ load_dotenv()
 
 # Import routers
 from backend.api.routes import initiatives, campaigns, content, metrics
+from backend.api.routes import executions  # NEW: Import executions router
 from backend.api.middleware.auth import verify_token
 from backend.api.middleware.initiative import get_tenant_id
 from backend.config.settings import settings
@@ -32,10 +33,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS - Important for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[
+        "http://localhost:3000",  # Next.js development
+        "http://localhost:3001",  # Alternative port
+        "*"  # Be more restrictive in production
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,13 +71,27 @@ app.include_router(
     tags=["metrics"]
 )
 
+# NEW: Include executions router
+app.include_router(
+    executions.router,
+    prefix="/api/executions",
+    tags=["executions"]
+)
+
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
+        "endpoints": {
+            "initiatives": "/api/initiatives",
+            "campaigns": "/api/campaigns",
+            "content": "/api/content",
+            "metrics": "/api/metrics",
+            "executions": "/api/executions"  # NEW
+        }
     }
 
 @app.get("/health")
@@ -81,4 +100,14 @@ async def health_check():
     return {
         "status": "healthy",
         "debug": settings.DEBUG
+    }
+
+@app.get("/api")
+async def api_info():
+    """API information endpoint"""
+    return {
+        "name": f"{settings.APP_NAME} API",
+        "version": settings.APP_VERSION,
+        "documentation": "/docs",
+        "openapi": "/openapi.json"
     }

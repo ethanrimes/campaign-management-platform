@@ -1,9 +1,19 @@
 # agents/researcher/models.py
 
+"""
+Researcher agent models that use centralized database models for persistence.
+Agent-specific structures for research logic with database model integration.
+"""
+
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from enum import Enum
+from uuid import UUID
+
+# Import centralized database models
+from backend.db.models.research import ResearchInsert
+from backend.db.models.serialization import serialize_dict, prepare_for_db
 
 
 class ResearchType(str, Enum):
@@ -23,16 +33,26 @@ class SourceReliability(str, Enum):
 
 
 class ResearchSource(BaseModel):
-    """Research source information"""
+    """Research source information for agent use"""
     url: str = Field(description="Source URL")
     title: str = Field(description="Source title")
     platform: str = Field(description="Platform (web, facebook, instagram)")
     reliability: SourceReliability = Field(default=SourceReliability.MEDIUM)
     accessed_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format"""
+        return {
+            'url': self.url,
+            'title': self.title,
+            'platform': self.platform,
+            'reliability': self.reliability.value,
+            'accessed_at': self.accessed_at.isoformat()
+        }
 
 
 class KeyFinding(BaseModel):
-    """Individual research finding"""
+    """Individual research finding for agent use"""
     topic: str = Field(description="Topic area")
     finding: str = Field(description="The finding or insight")
     source: str = Field(description="Source URL")
@@ -91,6 +111,10 @@ class HashtagRecommendation(BaseModel):
         # Remove spaces and special characters except underscores
         v = v.replace(' ', '').replace('-', '_')
         return v
+    
+    def to_simple_hashtag(self) -> str:
+        """Get just the hashtag string"""
+        return self.hashtag
 
 
 class ResearchPlan(BaseModel):
@@ -115,23 +139,10 @@ class ResearchOutput(BaseModel):
     research_type: ResearchType = Field(description="Type of research conducted")
     summary: ResearchSummary = Field(description="Research summary")
     key_findings: List[KeyFinding] = Field(description="Key findings from research")
-    content_opportunities: List[ContentOpportunity] = Field(
-        default_factory=list,
-        description="Content opportunities identified"
-    )
-    recommended_hashtags: List[HashtagRecommendation] = Field(
-        default_factory=list,
-        max_items=30,
-        description="Recommended hashtags"
-    )
-    competitor_insights: List[CompetitorInsight] = Field(
-        default_factory=list,
-        description="Competitor analysis"
-    )
-    trending_topics: List[TrendingTopic] = Field(
-        default_factory=list,
-        description="Trending topics"
-    )
+    content_opportunities: List[ContentOpportunity] = Field(default_factory=list)
+    recommended_hashtags: List[HashtagRecommendation] = Field(default_factory=list, max_items=30)
+    competitor_insights: List[CompetitorInsight] = Field(default_factory=list)
+    trending_topics: List[TrendingTopic] = Field(default_factory=list)
     sources: List[ResearchSource] = Field(description="Research sources used")
     research_plan: Optional[ResearchPlan] = Field(None, description="Research plan executed")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
@@ -147,3 +158,72 @@ class ResearchOutput(BaseModel):
         if len(v) == 0:
             raise ValueError("Must have at least one source")
         return v
+    
+    def to_db_insert(self, initiative_id: UUID, execution_id: Optional[UUID] = None) -> ResearchInsert:
+        """Convert to database insert model"""
+        # Prepare insights for database
+        insights = [
+            {
+                'topic': finding.topic,
+                'finding': finding.finding,
+                'source': finding.source,
+                'relevance_score': finding.relevance_score,
+                'confidence': finding.confidence
+            }
+            for finding in self.key_findings
+        ]
+        
+        # Extract source URLs
+        source_urls = [source.url for source in self.sources]
+        
+        # Prepare hashtags as list of strings
+        hashtags = [h.to_simple_hashtag() for h in self.recommended_hashtags]
+        
+        # Build raw data for storage
+        raw_data = {
+            'research_type': self.research_type.value,
+            'summary': serialize_dict(self.summary.dict()),
+            'key_findings': serialize_dict(insights),
+            'content_opportunities': serialize_dict([o.dict() for o in self.content_opportunities]),
+            'recommended_hashtags': hashtags,
+            'competitor_insights': serialize_dict([c.dict() for c in self.competitor_insights]),
+            'trending_topics': serialize_dict([t.dict() for t in self.trending_topics]),
+            'sources': serialize_dict([s.to_dict() for s in self.sources]),
+            'metadata': serialize_dict(self.metadata)
+        }
+        
+        # Create database insert model
+        return ResearchInsert(
+            initiative_id=initiative_id,
+            research_type=self.research_type.value,
+            topic="automated_research",
+            summary=self.summary.executive_summary,
+            insights=insights,
+            raw_data=raw_data,
+            sources=source_urls,
+            relevance_score={'overall': 0.8},  # Calculate based on findings
+            tags=['automated', 'ai_generated'],
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=7)),
+            execution_id=execution_id,
+            execution_step='Research'
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format for serialization"""
+        return serialize_dict(self.dict())
+
+
+# Export models for agent use
+__all__ = [
+    'ResearchType',
+    'SourceReliability',
+    'ResearchSource',
+    'KeyFinding',
+    'CompetitorInsight',
+    'TrendingTopic',
+    'ContentOpportunity',
+    'HashtagRecommendation',
+    'ResearchPlan',
+    'ResearchSummary',
+    'ResearchOutput'
+]

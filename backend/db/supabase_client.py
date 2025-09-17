@@ -5,14 +5,16 @@ from typing import Optional, Dict, Any, List
 import os
 from dotenv import load_dotenv
 
+# Import serialization utilities
+from backend.db.models.serialization import prepare_for_db, serialize_dict
+
 load_dotenv()
 
 class DatabaseClient:
-    """Supabase client with initiative-based RLS support"""
+    """Supabase client with initiative-based RLS support and automatic serialization"""
 
     def __init__(self, initiative_id: Optional[str] = None):
         self.initiative_id = initiative_id
-        # Remove the tenant_id confusion
         self.url = os.getenv("SUPABASE_URL")
         self.service_key = os.getenv("SUPABASE_SERVICE_KEY")
         
@@ -29,8 +31,6 @@ class DatabaseClient:
         """Ensure initiative_id is set in data (except for initiatives table itself)"""
         # Don't add initiative_id to the initiatives table itself
         if self.initiative_id and "initiative_id" not in data:
-            # Only add initiative_id if we're not dealing with the initiatives table
-            # (we can't check table name here, so this needs to be handled by the calling method)
             data["initiative_id"] = self.initiative_id
         return data
 
@@ -39,7 +39,6 @@ class DatabaseClient:
         if self.initiative_id:
             try:
                 # Try to set the PostgreSQL session variable using SQL
-                # Since the RPC function might not exist, we'll use raw SQL
                 self.client.postgrest.session.headers.update({
                     'x-initiative-id': self.initiative_id
                 })
@@ -47,20 +46,58 @@ class DatabaseClient:
                 # Log error but don't fail - RLS will still work through query filtering
                 print(f"Warning: Could not set initiative context for RLS: {e}")
 
+    def _prepare_data(self, data: Any) -> Any:
+        """
+        Prepare data for database operations using serialization utilities.
+        Handles Pydantic models, complex types, and nested structures.
+        """
+        # If it's a Pydantic model with to_db_dict method, use it
+        if hasattr(data, 'to_db_dict'):
+            return data.to_db_dict()
+        
+        # Otherwise use the general prepare_for_db utility
+        return prepare_for_db(data)
+
     async def insert(self, table_name: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Insert data with initiative_id automatically added"""
+        """Insert data with initiative_id automatically added and serialization"""
+        # Serialize the data first
+        serialized_data = self._prepare_data(data)
+        
         # Only add initiative_id for tables other than initiatives
         if table_name != "initiatives":
-            data = self._ensure_initiative_id(data)
+            serialized_data = self._ensure_initiative_id(serialized_data)
 
         try:
-            result = self.client.table(table_name).insert(data).execute()
+            result = self.client.table(table_name).insert(serialized_data).execute()
             if result.data and len(result.data) > 0:
                 return result.data[0]
             else:
                 raise Exception(f"Insert operation returned no data")
         except Exception as e:
+            # Add more context to the error
+            import json
+            print(f"Failed to insert into {table_name}")
+            print(f"Serialized data: {json.dumps(serialized_data, default=str)[:500]}...")
             raise Exception(f"Database insert failed for table '{table_name}': {str(e)}")
+
+    async def insert_many(self, table_name: str, data_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Insert multiple records with serialization"""
+        # Serialize each record
+        serialized_list = []
+        for data in data_list:
+            serialized_data = self._prepare_data(data)
+            
+            # Only add initiative_id for tables other than initiatives
+            if table_name != "initiatives":
+                serialized_data = self._ensure_initiative_id(serialized_data)
+            
+            serialized_list.append(serialized_data)
+
+        try:
+            result = self.client.table(table_name).insert(serialized_list).execute()
+            return result.data if result.data else []
+        except Exception as e:
+            raise Exception(f"Database bulk insert failed for table '{table_name}': {str(e)}")
 
     async def select(
         self, 
@@ -81,10 +118,12 @@ class DatabaseClient:
                 # For all other tables, filter by 'initiative_id'
                 query = query.eq("initiative_id", self.initiative_id)
         
-        # Apply additional filters
+        # Apply additional filters (serialize filter values if needed)
         if filters:
             for key, value in filters.items():
-                query = query.eq(key, value)
+                # Serialize complex filter values
+                serialized_value = self._prepare_data(value)
+                query = query.eq(key, serialized_value)
 
         # Apply limit
         if limit:
@@ -100,28 +139,61 @@ class DatabaseClient:
         data: Dict[str, Any],
         filters: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Update data with initiative filtering"""
-        query = self.client.table(table_name)
+        """Update data with initiative filtering and serialization"""
+        # Serialize the update data
+        serialized_data = self._prepare_data(data)
         
-        # Special handling for initiatives table
+        # Start with update operation
+        query = self.client.table(table_name).update(serialized_data)
+        
+        # Apply initiative filter
         if self.initiative_id:
             if table_name == "initiatives":
                 query = query.eq("id", self.initiative_id)
             else:
                 query = query.eq("initiative_id", self.initiative_id)
         
-        # Apply filters
+        # Apply additional filters (serialize filter values if needed)
         for key, value in filters.items():
-            query = query.eq(key, value)
+            serialized_value = self._prepare_data(value)
+            query = query.eq(key, serialized_value)
 
         # Execute update
         try:
-            result = query.update(data).execute()
+            result = query.execute()
             if result.data and len(result.data) > 0:
                 return result.data[0]
             return None
         except Exception as e:
             raise Exception(f"Database update failed for table '{table_name}': {str(e)}")
+
+    async def upsert(
+        self,
+        table_name: str,
+        data: Dict[str, Any],
+        on_conflict: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Upsert (insert or update) data with serialization"""
+        # Serialize the data
+        serialized_data = self._prepare_data(data)
+        
+        # Only add initiative_id for tables other than initiatives
+        if table_name != "initiatives":
+            serialized_data = self._ensure_initiative_id(serialized_data)
+
+        try:
+            # Build the upsert query
+            query = self.client.table(table_name).upsert(
+                serialized_data,
+                on_conflict=on_conflict or 'id'
+            )
+            
+            result = query.execute()
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            return None
+        except Exception as e:
+            raise Exception(f"Database upsert failed for table '{table_name}': {str(e)}")
 
     async def delete(
         self,
@@ -129,26 +201,30 @@ class DatabaseClient:
         filters: Dict[str, Any]
     ) -> bool:
         """Delete data with initiative filtering"""
-        query = self.client.table(table_name)
+        # Start with delete operation
+        query = self.client.table(table_name).delete()
         
-        # Special handling for initiatives table
+        # Apply initiative filter
         if self.initiative_id:
             if table_name == "initiatives":
                 query = query.eq("id", self.initiative_id)
             else:
                 query = query.eq("initiative_id", self.initiative_id)
         
-        # Apply filters
+        # Apply additional filters (serialize filter values if needed)
         for key, value in filters.items():
-            query = query.eq(key, value)
+            serialized_value = self._prepare_data(value)
+            query = query.eq(key, serialized_value)
 
         # Execute delete
-        result = query.delete().execute()
+        result = query.execute()
         return len(result.data) > 0 if result.data else False
 
     async def get_by_id(self, table_name: str, id: str) -> Optional[Dict[str, Any]]:
         """Get a single record by ID with initiative filtering"""
-        filters = {"id": id}
+        # Ensure ID is properly serialized (in case it's a UUID object)
+        serialized_id = self._prepare_data(id)
+        filters = {"id": serialized_id}
         results = await self.select(table_name, filters=filters)
         return results[0] if results else None
 

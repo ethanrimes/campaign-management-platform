@@ -9,11 +9,14 @@ supabase
 supabase/
 workflow-inspector/.env.local
 .env.local
-workflow-inspector/.env.local
+workflow-inspector/package-lock.json
+package-lock.json
 
 workflow-inspector/node_modules/
 node_modules/
 node_modules
+workflow-inspector/.next/
+.next/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -164,6 +164,8 @@ class GitignoreParser:
 
         # test outputs
         'test_outputs',
+        'node_modules',
+        
     ]
     
     def __init__(self, gitignore_path):

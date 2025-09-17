@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     WAVESPEED_VIDEO_MODEL: str = "wavespeed-ai/wan-2.2/i2v-5b-720p"
     WAVESPEED_API_BASE: str = "https://api.wavespeed.ai/api/v3"
     WAVESPEED_POLLING_INTERVAL: float = 2.0  # seconds between polls
-    WAVESPEED_MAX_POLL_ATTEMPTS: int = 60  # max attempts before timeout
+    WAVESPEED_MAX_POLL_ATTEMPTS: int = 120  # max attempts before timeout
     
     # Budget Configuration
     DEFAULT_DAILY_BUDGET: float = 100.0
@@ -109,7 +109,35 @@ class Settings(BaseSettings):
     INITIATIVES_DIR: str = "initiatives"
     ASSETS_DIR: str = "assets"
     CREDENTIALS_DIR: str = "credentials"
+
+    # Content generation limits per ad set (on a single content_creator call)
+    MAX_FACEBOOK_POSTS_PER_AD_SET: int = 5
+    MAX_INSTAGRAM_POSTS_PER_AD_SET: int = 5
+    MAX_PHOTOS_PER_AD_SET: int = 25
+    MAX_VIDEOS_PER_AD_SET: int = 4
+
+    # Content limits per individual post
+    MAX_VIDEOS_PER_POST: int = 1
+    MAX_PHOTOS_PER_POST: int = 3
+
+    # Planner limits for active entities
+    MAX_ACTIVE_CAMPAIGNS_PER_INITIATIVE: int = 2
+    MIN_ACTIVE_CAMPAIGNS_PER_INITIATIVE: int = 1
+    MAX_ACTIVE_AD_SETS_PER_CAMPAIGN: int = 5
+    MIN_ACTIVE_AD_SETS_PER_CAMPAIGN: int = 1
+
+    # --- Agent Guardrail Settings ---
+    RESEARCH_AGENT_MAX_ATTEMPTS: int = 1
+    PLANNER_AGENT_MAX_ATTEMPTS: int = 3
+    CONTENT_CREATOR_AGENT_MAX_ATTEMPTS: int = 3
+    MAX_RESEARCH_OUTPUT_LENGTH: int = 50000  # Character limit for researcher output
+
+    # --- Validation Strictness ---
+    ENFORCE_HARD_LIMITS: bool = True  # If False, log warnings but don't block
+    VALIDATION_ERROR_DETAIL_LEVEL: str = "verbose"  # "verbose" or "simple"
     
+    MAX_RESEARCH_QUERIES: int = 1
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

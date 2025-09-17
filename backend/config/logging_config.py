@@ -133,6 +133,12 @@ class LoggingConfig:
         logging.getLogger('supabase').setLevel(logging.WARNING)
         logging.getLogger('openai').setLevel(logging.WARNING)
         logging.getLogger('urllib3').setLevel(logging.WARNING)
+
+        # Add these to suppress HTTP/2 header compression logs
+        logging.getLogger('hpack').setLevel(logging.WARNING)
+        logging.getLogger('hpack.hpack').setLevel(logging.WARNING)
+        logging.getLogger('h2').setLevel(logging.WARNING)
+        logging.getLogger('httpcore.http2').setLevel(logging.WARNING)
         
         # Set specific levels for our modules if needed
         module_configs = {

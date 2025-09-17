@@ -11,7 +11,9 @@ Usage:
     workflow_type options:
         - research-only
         - planning-only
+        - content-creation-only
         - research-then-planning
+        - planning-then-content
         - full-campaign
         - all (runs all workflows)
         - trace <execution_id> (trace a specific execution)
@@ -201,6 +203,7 @@ class WorkflowTester:
         self.test_results = {}
         self.execution_ids = []
         self.tracer = ExecutionTracer(initiative_id)
+        self.db_client = DatabaseClient(initiative_id=initiative_id)
         
     async def test_workflow(self, workflow_type: WorkflowType) -> bool:
         """
@@ -236,10 +239,10 @@ class WorkflowTester:
             logger.info(f"🔑 Execution ID: {execution_id}")
             
             # Prepare input based on workflow type
-            input_data = self._get_workflow_input(workflow_type)
+            input_data = await self._get_workflow_input(workflow_type)
             
             logger.info(f"\n📋 Input for {workflow_type}:")
-            logger.info(json.dumps(input_data, indent=2))
+            logger.info(json.dumps(input_data, indent=2, default=str))
             
             # Execute workflow
             logger.info(f"\n🚀 Executing {workflow_type} workflow...")
@@ -285,7 +288,7 @@ class WorkflowTester:
             }
             return False
     
-    def _get_workflow_input(self, workflow_type: WorkflowType) -> Dict[str, Any]:
+    async def _get_workflow_input(self, workflow_type: WorkflowType) -> Dict[str, Any]:
         """Get appropriate input data for the workflow type"""
         base_input = {
             "trigger": "test",
@@ -293,15 +296,70 @@ class WorkflowTester:
             "timestamp": datetime.utcnow().isoformat()
         }
         
-        # Customize input based on workflow
-        if workflow_type in ["planning-only", "research-then-planning", "full-campaign"]:
+        # Special handling for content-creation-only
+        if workflow_type == "content-creation-only":
+            logger.info("Loading existing campaigns for content creation...")
+            
+            # Fetch existing campaigns from database
+            campaigns = await self.db_client.select(
+                "campaigns",
+                filters={"is_active": True},
+                limit=5  # Limit to recent campaigns
+            )
+            
+            if not campaigns:
+                logger.warning("No existing campaigns found. Creating mock campaign structure...")
+                # Create a mock campaign structure for testing
+                campaigns = [{
+                    "id": "mock-campaign-id",
+                    "name": "Test Campaign for Content Creation",
+                    "objective": "ENGAGEMENT",
+                    "ad_sets": []
+                }]
+            
+            # Fetch ad_sets for each campaign
+            for campaign in campaigns:
+                ad_sets = await self.db_client.select(
+                    "ad_sets",
+                    filters={"campaign_id": campaign["id"], "is_active": True}
+                )
+                
+                if not ad_sets and campaign["id"] == "mock-campaign-id":
+                    # Create mock ad_sets for testing
+                    ad_sets = [{
+                        "id": "mock-ad-set-id",
+                        "name": "Test Ad Set",
+                        "creative_brief": {
+                            "theme": "Test Theme",
+                            "tone": "professional",
+                            "format_preferences": ["image", "video"]
+                        },
+                        "materials": {
+                            "links": ["https://example.com"],
+                            "hashtags": ["#test", "#content"],
+                            "brand_assets": []
+                        },
+                        "post_frequency": 3,
+                        "post_volume": 2
+                    }]
+                
+                campaign["ad_sets"] = ad_sets
+            
+            base_input["campaigns"] = campaigns
+            base_input["content_volume"] = 3
+            base_input["content_types"] = ["image", "video", "carousel"]
+            
+            logger.info(f"Loaded {len(campaigns)} campaigns with ad_sets for content creation")
+        
+        # Customize input based on other workflow types
+        elif workflow_type in ["planning-only", "research-then-planning", "full-campaign"]:
             base_input.update({
                 "planning_window_days": 30,
                 "force_new_campaigns": False,
                 "budget_override": None
             })
         
-        if workflow_type in ["content-creation-only", "planning-then-content", "full-campaign"]:
+        if workflow_type in ["planning-then-content", "full-campaign"]:
             base_input.update({
                 "content_volume": 3,
                 "content_types": ["image", "video", "carousel"]
@@ -348,7 +406,9 @@ class WorkflowTester:
         workflows_to_test = [
             "research-only",
             "planning-only",
+            "content-creation-only",  # Added
             "research-then-planning",
+            "planning-then-content",
             "full-campaign"
         ]
         
@@ -402,7 +462,8 @@ async def main():
         default="all",
         choices=[
             "research-only",
-            "planning-only", 
+            "planning-only",
+            "content-creation-only",  # Added
             "research-then-planning",
             "planning-then-content",
             "full-campaign",
