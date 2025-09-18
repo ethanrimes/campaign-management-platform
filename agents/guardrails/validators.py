@@ -130,6 +130,8 @@ class ResearcherValidator(BaseValidator):
         except:
             return False
 
+# agents/guardrails/validators.py
+
 class PlannerValidator(BaseValidator):
     """Validates planner agent outputs against campaign/ad set limits"""
     
@@ -176,8 +178,6 @@ class PlannerValidator(BaseValidator):
                     campaign_ad_set_counts[campaign.get("name", "Unknown")] = active_ad_sets
             
             # Calculate total active campaigns (existing + proposed new ones)
-            # Note: This assumes the planner is creating NEW campaigns
-            # If updating existing ones, we'd need more sophisticated logic
             total_active = current_active_campaigns + proposed_active_campaigns
             
             # Validate campaign count limits
@@ -213,12 +213,20 @@ class PlannerValidator(BaseValidator):
                         f"Minimum required: {settings.MIN_ACTIVE_AD_SETS_PER_CAMPAIGN}"
                     )
             
-            # Validate budget allocation
+            # FIX: Safely validate budget allocation
             total_budget_allocated = output.get("total_budget_allocated", 0)
             initiative = context.get("initiative", {})
-            max_budget = initiative.get("total_budget", {}).get("amount", 0)
             
-            if total_budget_allocated > max_budget:
+            # Handle None values safely
+            total_budget_obj = initiative.get("total_budget")
+            if total_budget_obj and isinstance(total_budget_obj, dict):
+                max_budget = total_budget_obj.get("amount", 0)
+            else:
+                # If no budget defined, skip budget validation
+                max_budget = float('inf')  # Or use a default from settings
+                logger.debug("No budget limit defined for initiative, skipping budget validation")
+            
+            if max_budget != float('inf') and total_budget_allocated > max_budget:
                 return False, (
                     f"Budget allocation exceeds limit. "
                     f"Allocated: ${total_budget_allocated}, "
@@ -231,6 +239,8 @@ class PlannerValidator(BaseValidator):
             
         except Exception as e:
             logger.error(f"Planner validation error: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False, f"Validation failed: {str(e)}"
     
     def _would_be_active(self, entity: Dict[str, Any], now: datetime) -> bool:
@@ -244,8 +254,9 @@ class PlannerValidator(BaseValidator):
         if "is_active" in entity and not entity["is_active"]:
             return False
         
-        # Check schedule
-        schedule = entity.get("schedule", {})
+        # FIX: Use 'or {}' instead of get default to handle None
+        schedule = entity.get("schedule") or {}
+        
         start_date = self._parse_datetime(schedule.get("start_date"))
         end_date = self._parse_datetime(schedule.get("end_date"))
         

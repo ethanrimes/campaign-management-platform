@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from backend.config.settings import settings
 import json
 import logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,16 @@ class ContentCreatorPromptBuilder:
         self.base_prompt_path = "agents/content_creator/prompts/system_prompt.txt"
     
     def get_system_prompt(self) -> str:
-        """Build complete system prompt with content limits"""
+        """Build complete system prompt with content limits and date context"""
         base_prompt = self._load_base_prompt()
         
+        # Add current date context to help LLM generate future dates
+        current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
         limits = f"""
+
+CURRENT DATE: {current_date} (UTC)
+IMPORTANT: All scheduled_time values MUST be in the future from {current_date}
 
 CONTENT CREATION LIMITS:
 ========================
@@ -31,39 +38,38 @@ PER AD SET LIMITS:
 - Maximum photos total: {settings.MAX_PHOTOS_PER_AD_SET}
 - Maximum videos total: {settings.MAX_VIDEOS_PER_AD_SET}
 
-PER POST LIMITS:
-- Maximum photos per post: {settings.MAX_PHOTOS_PER_POST}
-- Maximum videos per post: {settings.MAX_VIDEOS_PER_POST}
-- Instagram caption max: 2200 characters
-- Hashtags: 20-30 for Instagram, 3-5 for Facebook
+ENUM VALUES (MUST use lowercase):
+- post_type: One of [image, video, carousel, story, reel, link, text]  
+- status: One of [draft, scheduled, published, failed]
 
 OUTPUT STRUCTURE REQUIREMENTS:
 - Must provide ContentBatch with all required fields
 - batch_id: Unique UUID for the batch
-- ad_set_id: ID of the ad set this content is for
+- ad_set_id: ID of the ad set this content is for  
 - posts: Array of Post objects
-- theme: Content theme for the batch
-- target_audience: Description of target audience
+- theme: Content theme string
+- target_audience: String description of target audience (NOT a dict)
 
 EACH POST MUST INCLUDE:
 - post_id: Unique UUID
-- post_type: One of [IMAGE, VIDEO, CAROUSEL, REEL, LINK, TEXT]
+- post_type: Lowercase enum value (image, video, carousel, etc.)
 - content: PostContent with caption, hashtags, links
-- media: Array of MediaSpec with generation prompts
-- schedule: PostSchedule with timing
-- status: Post status (default: DRAFT)
+- media: Array of MediaSpec with generation prompts  
+- schedule: PostSchedule with future datetime (after {current_date})
+- status: Post status (default: draft)
 - generation_metadata: Metadata about generation
 
 CRITICAL RULES:
 1. NEVER exceed remaining capacity limits
-2. Adapt content for different post formats
-3. Include clear calls-to-action
-4. Ensure all content is platform-appropriate
-5. Use research-validated hashtags and links
+2. Use lowercase for all enum values
+3. Schedule times MUST be in the future
+4. target_audience must be a string, not a dict
+5. Include clear calls-to-action
 """
         
         return base_prompt + limits
     
+
     def build_user_prompt(self, input_data: Dict[str, Any], error_feedback: Optional[str] = None) -> str:
         """Build user prompt with content context"""
         ad_set = input_data.get("ad_set", {})
@@ -121,11 +127,12 @@ Create a ContentBatch with posts that will engage the target audience.
 """
         
         if error_feedback:
+            escaped_feedback = error_feedback.replace('{', '{{').replace('}', '}}')
             prompt += f"""
 
 IMPORTANT - PREVIOUS ATTEMPT FAILED:
 ====================================
-{error_feedback}
+{escaped_feedback}
 
 Please correct this issue and ensure you stay within capacity limits.
 """

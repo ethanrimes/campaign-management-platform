@@ -2,7 +2,9 @@
 
 from typing import Dict, Any, Optional
 from backend.config.settings import settings
+import json
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ CRITICAL RULES:
         return base_prompt + limits
     
     def build_user_prompt(self, input_data: Dict[str, Any], error_feedback: Optional[str] = None) -> str:
-        """Build user prompt with planning context"""
+        """Build user prompt with planning context - with escaped braces"""
         context = input_data.get("context", {})
         research_resources = input_data.get("research_resources", {})
         budget = input_data.get("budget", {})
@@ -71,16 +73,41 @@ CRITICAL RULES:
         # Extract statistics
         stats = context.get("statistics", {})
         
+        # Format objectives - escape any braces in the output
+        objectives_str = self._format_objectives(initiative.get('objectives', {}))
+        
+        # Format links and hashtags - ensure no unescaped braces
+        links_str = self._format_links(research_resources.get('validated_links', []))
+        hashtags_str = self._format_hashtags(research_resources.get('validated_hashtags', []))
+        opportunities_str = self._format_opportunities(research_resources.get('opportunities', []))
+
+        # Get current date for context
+        current_date = datetime.now()
+        date_str = current_date.strftime("%Y-%m-%d")
+        suggested_start = current_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+        suggested_end = (current_date + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        
         prompt = f"""
 Create a COMPLETE marketing campaign strategy. All previous campaigns have been archived.
 You are creating the ENTIRE active campaign structure for this initiative.
+
+CURRENT DATE CONTEXT:
+====================
+Today's Date: {date_str}
+Current DateTime: {current_date.isoformat()}Z
+
+IMPORTANT: All campaigns must have dates in the FUTURE from today ({date_str}).
+Example valid schedule:
+  start_date: "{suggested_start}"
+  end_date: "{suggested_end}"
 
 INITIATIVE CONTEXT:
 ==================
 Name: {initiative.get('name', 'Unknown')}
 Category: {initiative.get('category', 'N/A')}
 Description: {initiative.get('description', 'N/A')}
-Objectives: {self._format_objectives(initiative.get('objectives', {}))}
+Objectives: {objectives_str}
 Optimization Metric: {initiative.get('optimization_metric', 'reach')}
 
 AVAILABLE BUDGET (USE FULLY):
@@ -91,13 +118,13 @@ Total Budget: ${budget.get('total', 10000)}
 RESEARCH-VALIDATED RESOURCES:
 =============================
 Validated Links ({len(research_resources.get('validated_links', []))} available):
-{self._format_links(research_resources.get('validated_links', []))}
+{links_str}
 
 Validated Hashtags ({len(research_resources.get('validated_hashtags', []))} available):
-{self._format_hashtags(research_resources.get('validated_hashtags', []))}
+{hashtags_str}
 
 Content Opportunities:
-{self._format_opportunities(research_resources.get('opportunities', []))}
+{opportunities_str}
 
 HISTORICAL CONTEXT (now archived):
 ==================================
@@ -119,14 +146,33 @@ Create a comprehensive PlannerOutput that becomes the complete active strategy.
 """
         
         if error_feedback:
+            # Parse the error to provide specific guidance
+            if "past" in error_feedback.lower() or "already ended" in error_feedback.lower():
+                error_guidance = """
+    CRITICAL ERROR - DATES IN THE PAST:
+    Your previous attempt used dates that have already passed.
+    ALL campaigns must have FUTURE dates starting from today ({date_str}) or later.
+    DO NOT use dates from 2023 or any past dates!
+    """
+            elif "campaign limit" in error_feedback.lower():
+                error_guidance = """
+    CRITICAL ERROR - CAMPAIGN COUNT:
+    You must create between {settings.MIN_ACTIVE_CAMPAIGNS_PER_INITIATIVE} and {settings.MAX_ACTIVE_CAMPAIGNS_PER_INITIATIVE} campaigns.
+    Your previous attempt did not meet these requirements.
+    """
+            else:
+                error_guidance = error_feedback
+                
             prompt += f"""
 
-IMPORTANT - PREVIOUS ATTEMPT FAILED:
-====================================
-{error_feedback}
+    ⚠️ PREVIOUS ATTEMPT FAILED - MUST FIX:
+    =====================================
+    {error_guidance}
 
-Please correct this issue and ensure all required fields are properly formatted.
-"""
+    Original error: {error_feedback}
+
+    Please correct these issues in your new attempt.
+    """
         
         return prompt
     
@@ -141,47 +187,71 @@ Please correct this issue and ensure all required fields are properly formatted.
 strategic campaign hierarchies grounded in research data."""
     
     def _format_objectives(self, objectives: Dict[str, Any]) -> str:
-        """Format objectives"""
+        """Format objectives - safely handling any dict structures"""
         if not objectives:
             return "None specified"
         
         lines = []
         for key, value in objectives.items():
-            lines.append(f"  - {key}: {value}")
+            # Convert value to string and escape braces if it's a dict/list representation
+            value_str = str(value)
+            if '{' in value_str or '}' in value_str:
+                value_str = value_str.replace('{', '{{').replace('}', '}}')
+            lines.append(f"  - {key}: {value_str}")
         return "\n".join(lines)
     
     def _format_links(self, links: list) -> str:
-        """Format validated links"""
+        """Format validated links - safely"""
         if not links:
             return "  No validated links available"
         
-        return "\n".join(f"  - {link}" for link in links[:10])
+        formatted = []
+        for link in links[:10]:
+            if isinstance(link, dict):
+                # If it's a dict, extract URL safely
+                url = link.get('url', str(link))
+                # Escape any braces in the URL
+                safe_url = url.replace('{', '{{').replace('}', '}}')
+                formatted.append(f"  - {safe_url}")
+            else:
+                # It's a string URL
+                safe_link = str(link).replace('{', '{{').replace('}', '}}')
+                formatted.append(f"  - {safe_link}")
+        
+        return "\n".join(formatted)
     
     def _format_hashtags(self, hashtags: list) -> str:
-        """Format validated hashtags"""
+        """Format validated hashtags - safely"""
         if not hashtags:
             return "  No validated hashtags available"
         
-        # Handle both dict and string formats
         formatted = []
         for h in hashtags[:20]:
             if isinstance(h, dict):
-                formatted.append(f"  - {h.get('hashtag', h)}")
+                hashtag = h.get('hashtag', str(h))
             else:
-                formatted.append(f"  - {h}")
+                hashtag = str(h)
+            
+            # Escape any braces (unlikely in hashtags, but safe)
+            safe_hashtag = hashtag.replace('{', '{{').replace('}', '}}')
+            formatted.append(f"  - {safe_hashtag}")
         
         return "\n".join(formatted)
     
     def _format_opportunities(self, opportunities: list) -> str:
-        """Format content opportunities"""
+        """Format content opportunities - safely"""
         if not opportunities:
             return "  No specific opportunities identified"
         
         formatted = []
         for opp in opportunities[:5]:
             if isinstance(opp, dict):
-                formatted.append(f"  - {opp.get('description', opp)}")
+                desc = opp.get('description', str(opp))
             else:
-                formatted.append(f"  - {opp}")
+                desc = str(opp)
+            
+            # Escape any braces in the description
+            safe_desc = desc.replace('{', '{{').replace('}', '}}')
+            formatted.append(f"  - {safe_desc}")
         
         return "\n".join(formatted)

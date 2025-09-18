@@ -15,10 +15,52 @@ from uuid import UUID, uuid4
 from backend.db.models.post import PostsInsert
 from backend.db.models.media_file import MediaFilesInsert
 from backend.db.models.serialization import serialize_dict, prepare_for_db
+from datetime import datetime, timezone  # Add timezone import
+from pydantic import validator
+
+class PostType(str, Enum):
+    """Types of social media posts - MUST be lowercase"""
+    IMAGE = "image"  # Changed to lowercase values
+    VIDEO = "video"
+    CAROUSEL = "carousel"
+    STORY = "story"
+    REEL = "reel"
+    LINK = "link"
+    TEXT = "text"
+
+class PostSchedule(BaseModel):
+    """Post scheduling information"""
+    scheduled_time: datetime = Field(description="Scheduled publication time")
+    timezone: str = Field(default="UTC", description="Timezone")
+    optimal_time: bool = Field(default=False, description="Is this an optimal posting time")
+    
+    @validator('scheduled_time')
+    def validate_future_time(cls, v):
+        # FIX: Use timezone-aware datetime for comparison
+        now = datetime.now(timezone.utc)
+        
+        # Ensure v is also timezone-aware
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        
+        if v < now:
+            raise ValueError("Scheduled time must be in the future")
+        return v
+
+
+class GenerationMetadata(BaseModel):
+    """Metadata about content generation"""
+    model_used: str = Field(description="AI model used")
+    prompt_tokens: Optional[int] = Field(None, description="Prompt token count")
+    completion_tokens: Optional[int] = Field(None, description="Completion token count")
+    generation_time_seconds: Optional[float] = Field(None, description="Generation time")
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    agent_id: str = Field(description="Agent ID that generated content")
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))  # FIX: timezone-aware
 
 
 class PostType(str, Enum):
-    """Types of social media posts"""
+    """Types of social media posts - MUST be lowercase"""
     IMAGE = "image"
     VIDEO = "video"
     CAROUSEL = "carousel"
@@ -60,8 +102,8 @@ class MediaSpec(BaseModel):
         if 'format' in values and values['format'] in [MediaFormat.MP4, MediaFormat.MOV]:
             if v is None:
                 raise ValueError("Video must have duration")
-            if v > 90:  # Instagram reel limit
-                raise ValueError("Video duration exceeds platform limits")
+            # Remove the hard 90-second limit - let platform-specific tools handle this
+            # The API doesn't actually enforce duration limits
         return v
     
     def to_db_insert(self, initiative_id: UUID, execution_id: Optional[UUID] = None) -> MediaFilesInsert:
@@ -133,21 +175,16 @@ class PostSchedule(BaseModel):
     
     @validator('scheduled_time')
     def validate_future_time(cls, v):
-        if v < datetime.utcnow():
+        # FIX: Use timezone-aware datetime for comparison
+        now = datetime.now(timezone.utc)
+        
+        # Ensure v is also timezone-aware
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        
+        if v < now:
             raise ValueError("Scheduled time must be in the future")
         return v
-
-
-class GenerationMetadata(BaseModel):
-    """Metadata about content generation"""
-    model_used: str = Field(description="AI model used")
-    prompt_tokens: Optional[int] = Field(None, description="Prompt token count")
-    completion_tokens: Optional[int] = Field(None, description="Completion token count")
-    generation_time_seconds: Optional[float] = Field(None, description="Generation time")
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    agent_id: str = Field(description="Agent ID that generated content")
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
-
 
 class Post(BaseModel):
     """Individual post structure for agent use"""

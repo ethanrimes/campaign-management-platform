@@ -73,6 +73,11 @@ class BaseAgent(ABC):
         model_config = config.llm_config or self._load_model_config()
         self.llm = self._initialize_llm(model_config)
         
+        # Initialize shared loader if not already set by child
+        if not hasattr(self, 'initiative_loader'):
+            from agents.guardrails.initiative_loader import InitiativeLoader
+            self.initiative_loader = InitiativeLoader(config.initiative_id)
+        
         # Parser will be initialized per agent with their specific output model
         self.parser = None
         self.format_instructions = None
@@ -140,6 +145,13 @@ class BaseAgent(ABC):
     def build_user_prompt(self, input_data: Dict[str, Any], error_feedback: Optional[str] = None) -> str:
         """Build the user prompt with input data and optional error feedback"""
         pass
+
+    def _sanitize_llm_output(self, output: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Post-process LLM output to fix common issues like UUID generation.
+        Override in child classes for agent-specific sanitization.
+        """
+        return output
     
     def initialize_parser(self):
         """Initialize the parser with the agent's output model"""
@@ -148,26 +160,16 @@ class BaseAgent(ABC):
         self.format_instructions = self.parser.get_format_instructions()
     
     async def execute(self, input_data: Dict[str, Any]) -> AgentOutput:
-        """Execute the agent's main task with LangChain structured output"""
+        """
+        Main execution method that delegates to child's _run() method.
+        This ensures child-specific logic (like save_plan) is executed.
+        """
         try:
-            # Ensure parser is initialized
-            if not self.parser:
-                self.initialize_parser()
-            
             # Ensure input data is properly serialized
             serialized_input = prepare_for_db(input_data)
             
-            # Run the agent with retry logic
-            result = await self.execute_with_retries(serialized_input)
-            
-            # Validate output
-            if not self.validate_output(result):
-                return AgentOutput(
-                    agent_name=self.config.name,
-                    success=False,
-                    data={},
-                    errors=["Output validation failed"]
-                )
+            # Call the child's _run() method which handles all agent-specific logic
+            result = await self._run(serialized_input)
             
             # Serialize the result data
             serialized_result = prepare_for_db(result)
@@ -198,17 +200,49 @@ class BaseAgent(ABC):
                 }
             )
     
+    @abstractmethod
+    async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Agent-specific execution logic. Must be implemented by each agent.
+        This method should:
+        1. Process input data
+        2. Call execute_with_retries() for LLM interaction
+        3. Validate output with guardrails
+        4. Save/persist any necessary data
+        5. Return the final result
+        """
+        pass
+    
     async def execute_with_retries(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute with retry logic and LangChain structured output"""
+        """
+        Execute LLM call with retry logic and structured output.
+        Fetches fresh context on EACH attempt to ensure data consistency.
+        """
+        # Ensure parser is initialized
+        if not self.parser:
+            self.initialize_parser()
+        
         max_attempts = getattr(settings, f"{self.__class__.__name__.upper()}_MAX_ATTEMPTS", 3)
         error_feedback = None
         
         for attempt in range(max_attempts):
             logger.info(f"🤖 {self.config.name} - Attempt {attempt + 1}/{max_attempts}")
             
-            # Build prompts
+            # CRITICAL: Always fetch fresh context for each attempt
+            # This ensures we have the latest state from the database
+            logger.debug(f"Fetching fresh context for attempt {attempt + 1}")
+            fresh_context = await self.initiative_loader.load_full_context(force_refresh=True)
+            
+            # Merge fresh context with input data
+            enhanced_input = {
+                **input_data,
+                "context": fresh_context,
+                "statistics": fresh_context.get("statistics", {})
+            }
+            
+            # Build prompts with fresh data
             system_prompt = self.get_system_prompt()
-            user_prompt = self.build_user_prompt(input_data, error_feedback)
+            user_prompt = self.build_user_prompt(enhanced_input, error_feedback)
             
             # Add format instructions
             enhanced_user_prompt = user_prompt + "\n\n{format_instructions}"
@@ -239,10 +273,23 @@ class BaseAgent(ABC):
                     result = output.dict()
                 else:
                     result = output
+
+                result = self._sanitize_llm_output(result)
                 
-                # SUCCESS! Return the result
-                logger.info(f"✅ {self.config.name} succeeded on attempt {attempt + 1}")
-                return result  # <-- THIS WAS MISSING!
+                # Validate output structure
+                if self.validate_output(result):
+                    # Additional validation with fresh context if agent has validator
+                    if hasattr(self, 'validator') and self.validator:
+                        is_valid, error_msg = self.validator.validate(result, fresh_context)
+                        if not is_valid:
+                            error_feedback = f"Validation failed: {error_msg}"
+                            logger.warning(error_feedback)
+                            continue
+                    
+                    logger.info(f"✅ {self.config.name} succeeded on attempt {attempt + 1}")
+                    return result
+                else:
+                    error_feedback = "Output validation failed. Check required fields."
                     
             except Exception as e:
                 error_feedback = f"Error: {str(e)}"
@@ -252,10 +299,33 @@ class BaseAgent(ABC):
                     error_feedback = f"Output format error: {str(e)}. Ensure all required fields are present."
             
             if attempt < max_attempts - 1:
-                logger.info("Retrying with error feedback...")
+                logger.info("Retrying with fresh context and error feedback...")
         
         # If all attempts failed
         raise Exception(f"{self.config.name} failed after {max_attempts} attempts. Last error: {error_feedback}")
+    
+    async def fetch_fresh_context(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Fetch fresh context from database. 
+        Override in child classes for agent-specific context needs.
+        """
+        return input_data
+    
+    async def validate_output_with_context(self, output: Any, context: Dict[str, Any]) -> bool:
+        """
+        Validate output with fresh context.
+        Override in child classes for context-aware validation.
+        """
+        return self.validate_output(output)
+    
+
+    @abstractmethod
+    def validate_output(self, output: Any) -> bool:
+        """
+        Validate the structure of the LLM output.
+        Must be implemented by each agent to validate their specific output model.
+        """
+        pass
     
     def _serialize_for_db(self, data: Any) -> Any:
         """Helper method for agents to serialize data for database operations"""

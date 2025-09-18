@@ -1,3 +1,5 @@
+# agents/researcher/agent.py
+
 from typing import Any, Dict, List, Optional, Type
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
@@ -42,42 +44,6 @@ class ResearchAgent(BaseAgent):
         """Delegate to prompt builder"""
         return self.prompt_builder.build_user_prompt(input_data, error_feedback)
     
-    async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute research workflow with guardrails"""
-        logger.info("=" * 60)
-        logger.info("RESEARCH AGENT STARTING (WITH GUARDRAILS)")
-        logger.info("=" * 60)
-        
-        # Load full context for guardrail validation
-        context = await self.initiative_loader.load_full_context()
-        
-        # Gather research data
-        initiative_data = await self._fetch_initiative_data()
-        search_queries = self._determine_search_queries(initiative_data)
-        search_results = await self._iterative_search(search_queries, initiative_data)
-        
-        # Prepare structured input for LangChain
-        research_input = {
-            "initiative_data": initiative_data,
-            "search_results": search_results,
-            "search_queries": search_queries,
-            "context": context
-        }
-        
-        # Use BaseAgent's retry logic with structured output
-        result = await self.execute_with_retries(research_input)
-        
-        # Validate with guardrails
-        is_valid, error_msg = self.validator.validate(result, context)
-        if not is_valid:
-            raise ValueError(f"Guardrail validation failed: {error_msg}")
-        
-        # Store validated research
-        await self._store_research(result)
-        
-        logger.info("✅ Research completed with guardrail validation")
-        return result
-    
     def validate_output(self, output: Any) -> bool:
         """Validate output structure and content"""
         if not isinstance(output, dict):
@@ -88,8 +54,57 @@ class ResearchAgent(BaseAgent):
         if not all(field in output for field in required_fields):
             return False
         
-        # Additional validation via guardrails will happen in _run
+        # Check that summary has required subfields
+        summary = output.get("summary", {})
+        if not isinstance(summary, dict):
+            return False
+        
+        if "executive_summary" not in summary:
+            return False
+        
+        # Check key_findings is a list with at least one item
+        key_findings = output.get("key_findings", [])
+        if not isinstance(key_findings, list) or len(key_findings) == 0:
+            return False
+        
+        # Check sources is a list with at least one item
+        sources = output.get("sources", [])
+        if not isinstance(sources, list) or len(sources) == 0:
+            return False
+        
         return True
+    
+    async def _run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute research workflow with guardrails."""
+        logger.info("=" * 60)
+        logger.info("RESEARCH AGENT STARTING (WITH GUARDRAILS)")
+        logger.info("=" * 60)
+        
+        # STEP 1: Gather research data (no need to load context here)
+        initiative_data = await self._fetch_initiative_data()
+        
+        # STEP 2: Generate search queries
+        search_queries = self._determine_search_queries(initiative_data)
+        
+        # STEP 3: Execute searches
+        search_results = await self._iterative_search(search_queries, initiative_data)
+        
+        # STEP 4: Prepare structured input (context will be added in execute_with_retries)
+        research_input = {
+            "initiative_data": initiative_data,
+            "search_results": search_results,
+            "search_queries": search_queries
+            # Don't add context here - base class will handle it
+        }
+        
+        # STEP 5: Call execute_with_retries (will fetch fresh context)
+        result = await self.execute_with_retries(research_input)
+        
+        # STEP 6: Store validated research in database
+        await self._store_research(result)
+        
+        logger.info("✅ Research completed with guardrail validation and database persistence")
+        return result
     
     async def _fetch_initiative_data(self) -> Dict[str, Any]:
         """Fetch initiative and related data"""
@@ -180,7 +195,10 @@ class ResearchAgent(BaseAgent):
             "summary": research_output.get("summary", {}).get("executive_summary", ""),
             "insights": research_output.get("key_findings", []),
             "raw_data": research_output,
-            "sources": [s.get("url") for s in research_output.get("sources", [])],
+            "sources": [
+                s.get("url") if isinstance(s, dict) else s 
+                for s in research_output.get("sources", [])
+            ],
             "relevance_score": {"overall": 0.8},
             "tags": ["automated", "langchain"],
             "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),

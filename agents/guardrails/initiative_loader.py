@@ -1,5 +1,3 @@
-# agents/guardrails/initiative_loader.py
-
 """
 Centralized data loader for initiative context.
 Provides a single source of truth for all guardrail validations.
@@ -138,6 +136,9 @@ class InitiativeLoader:
                 filters={"id": self.initiative_id}
             )
             
+            # Ensure we have a list, not None
+            initiatives = initiatives or []
+            
             if not initiatives:
                 logger.warning(f"Initiative {self.initiative_id} not found")
                 return {}
@@ -154,6 +155,9 @@ class InitiativeLoader:
                 "campaigns",
                 filters={"initiative_id": self.initiative_id}
             )
+            
+            # Ensure we have a list, not None
+            campaigns = campaigns or []
             
             if not campaigns:
                 logger.info("No campaigns found for initiative")
@@ -172,11 +176,14 @@ class InitiativeLoader:
                         "ad_sets",
                         filters={"campaign_id": campaign["id"]}
                     )
-                    campaign["ad_set_count"] = len(ad_sets) if ad_sets else 0
+                    # Ensure we have a list, not None
+                    ad_sets = ad_sets or []
+                    
+                    campaign["ad_set_count"] = len(ad_sets)
                     campaign["active_ad_set_count"] = sum(
                         1 for ad_set in ad_sets 
                         if self._is_entity_active(ad_set, now)
-                    ) if ad_sets else 0
+                    )
                 except Exception as e:
                     logger.error(f"Error counting ad sets for campaign {campaign['id']}: {e}")
                     campaign["ad_set_count"] = 0
@@ -196,6 +203,9 @@ class InitiativeLoader:
                 filters={"initiative_id": self.initiative_id}
             )
             
+            # Ensure we have a list, not None
+            ad_sets = ad_sets or []
+            
             if not ad_sets:
                 logger.info("No ad sets found for initiative")
                 return []
@@ -213,8 +223,8 @@ class InitiativeLoader:
                         filters={"ad_set_id": ad_set["id"]}
                     )
                     
-                    if not posts:
-                        posts = []
+                    # CRITICAL FIX: Ensure posts is always a list, never None
+                    posts = posts or []
                     
                     # Count by type
                     facebook_posts = [p for p in posts if p.get("facebook_post_id")]
@@ -226,6 +236,10 @@ class InitiativeLoader:
                     
                     for post in posts:
                         media_urls = post.get("media_urls", [])
+                        # Ensure media_urls is always a list
+                        if media_urls is None:
+                            media_urls = []
+                        
                         post_type = post.get("post_type", "")
                         
                         if post_type in ["image", "carousel"]:
@@ -244,6 +258,7 @@ class InitiativeLoader:
                     }
                 except Exception as e:
                     logger.error(f"Error counting content for ad set {ad_set['id']}: {e}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                     ad_set["content_counts"] = {
                         "total_posts": 0,
                         "facebook_posts": 0,
@@ -258,6 +273,7 @@ class InitiativeLoader:
             
         except Exception as e:
             logger.error(f"Error loading ad sets: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     async def _load_posts(self) -> List[Dict[str, Any]]:
@@ -268,6 +284,9 @@ class InitiativeLoader:
                 filters={"initiative_id": self.initiative_id}
             )
             
+            # CRITICAL FIX: Ensure posts is always a list, never None
+            posts = posts or []
+            
             if not posts:
                 logger.info("No posts found for initiative")
                 return []
@@ -275,6 +294,10 @@ class InitiativeLoader:
             # Enhance with media counts
             for post in posts:
                 media_urls = post.get("media_urls", [])
+                # Ensure media_urls is always a list
+                if media_urls is None:
+                    media_urls = []
+                    
                 post["media_count"] = len(media_urls)
                 
                 # Determine platform
@@ -289,6 +312,7 @@ class InitiativeLoader:
             
         except Exception as e:
             logger.error(f"Error loading posts: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     async def _load_media_files(self) -> Dict[str, List[Dict[str, Any]]]:
@@ -298,6 +322,9 @@ class InitiativeLoader:
                 "media_files",
                 filters={"initiative_id": self.initiative_id}
             )
+            
+            # Ensure we have a list, not None
+            media_files = media_files or []
             
             grouped = {
                 "images": [],
@@ -340,7 +367,9 @@ class InitiativeLoader:
                 filters={"initiative_id": self.initiative_id},
                 limit=10
             )
-            return research if research else []
+            # Ensure we have a list, not None
+            research = research or []
+            return research
         except Exception as e:
             logger.error(f"Error loading research: {e}")
             return []

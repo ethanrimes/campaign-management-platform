@@ -121,7 +121,11 @@ class ExecutionTracer:
         for c in campaigns:
             logger.info(f"  - {c.get('name', 'N/A')}")
             logger.info(f"    Objective: {c.get('objective', 'N/A')}")
-            logger.info(f"    Budget: ${c.get('lifetime_budget', 0):,.2f}")
+            budget = c.get('lifetime_budget')
+            if budget is not None:
+                logger.info(f"    Budget: ${budget:,.2f}")
+            else:
+                logger.info(f"    Budget: Not specified")
         
         # Ad Sets
         ad_sets = await self.db_client.select(
