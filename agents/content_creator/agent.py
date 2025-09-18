@@ -6,15 +6,10 @@ from pydantic import BaseModel
 from agents.base.agent import BaseAgent, AgentConfig
 from agents.content_creator.models import ContentBatch
 from agents.content_creator.prompt_builder import ContentCreatorPromptBuilder
-from agents.content_creator.tools.facebook import (
-    FacebookTextLinkPostTool, FacebookImagePostTool, FacebookVideoPostTool
-)
-from agents.content_creator.tools.instagram import (
-    InstagramImagePostTool, InstagramReelPostTool
-)
 from backend.db.supabase_client import DatabaseClient
 from agents.guardrails.state import ContentGenerationState, InitiativeGenerationState
 from backend.config.settings import settings
+from agents.content_creator.tools.posting_service import PostingService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,18 +178,24 @@ class ContentCreatorAgent(BaseAgent):
             ad_set_counts
         )
         
+        # Initialize posting service
+        posting_service = PostingService(
+            initiative_id=self.config.initiative_id,
+            state=None,  # Will set per ad_set
+            execution_id=self.execution_id
+        )
+        
         all_posts = []
         all_errors = []
+        all_results = []
         
-        # Process each campaign and ad set with detailed logging
+        # Process each campaign and ad set
         for campaign in campaigns:
             campaign_name = campaign.get("name", "Unknown")
             campaign_id = campaign.get("id", "Unknown")
             
             logger.info(f"\n📋 Processing Campaign: {campaign_name}")
             logger.info(f"   ID: {campaign_id}")
-            logger.info(f"   Objective: {campaign.get('objective', 'Not specified')}")
-            logger.info(f"   Ad Sets: {len(campaign.get('ad_sets', []))}")
             
             for ad_set in campaign.get("ad_sets", []):
                 ad_set_id = ad_set.get("id")
@@ -203,102 +204,83 @@ class ContentCreatorAgent(BaseAgent):
                 if not ad_set_id:
                     continue
                 
-                logger.info(f"\n  📍 Ad Set: {ad_set_name}")
+                logger.info(f"\n  🎯 Ad Set: {ad_set_name}")
                 logger.info(f"     ID: {ad_set_id}")
-                logger.info(f"     Placements: {ad_set.get('placements', [])}")
-                logger.info(f"     Post Volume: {ad_set.get('post_volume', 'not specified')}")
-                logger.info(f"     Post Frequency: {ad_set.get('post_frequency', 'not specified')}/week")
-                
-                # Show current content counts
-                if ad_set_id in ad_set_counts:
-                    counts = ad_set_counts[ad_set_id]
-                    logger.info(f"     Current Content:")
-                    logger.info(f"       - Facebook posts: {counts['facebook_posts']}")
-                    logger.info(f"       - Instagram posts: {counts['instagram_posts']}")
-                    logger.info(f"       - Photos: {counts['photos']}")
-                    logger.info(f"       - Videos: {counts['videos']}")
                 
                 # Create input for this specific ad set
                 ad_set_input = {
                     "ad_set": ad_set,
                     "campaign": campaign,
-                    "campaigns": campaigns
+                    "campaigns": campaigns,
+                    "context": initial_context
                 }
                 
                 try:
                     logger.info(f"     🚀 Generating content...")
                     
-                    # Execute with retries
+                    # Execute with retries to get ContentBatch from LLM
                     content_batch = await self.execute_with_retries(ad_set_input)
                     
-                    # Safely get posts, defaulting to empty list
+                    # Safely get posts
                     posts = content_batch.get("posts", []) if content_batch else []
                     
-                    if posts:
-                        logger.info(f"     ✅ Generated {len(posts)} posts:")
-                        
-                        # Count by platform and type
-                        fb_count = 0
-                        ig_count = 0
-                        post_types = {}
-                        
-                        for i, post in enumerate(posts, 1):
-                            post_type = post.get("post_type", "unknown")
-                            post_types[post_type] = post_types.get(post_type, 0) + 1
-                            
-                            # Determine platforms based on placement/type
-                            platforms = []
-                            placements = ad_set.get("placements") or []
-                            
-                            if any("facebook" in p.lower() for p in placements):
-                                fb_count += 1
-                                platforms.append("Facebook")
-                            if any("instagram" in p.lower() for p in placements):
-                                ig_count += 1
-                                platforms.append("Instagram")
-                            
-                            # If no specific placements, assume both
-                            if not platforms:
-                                if post_type in ["reel", "story"]:
-                                    platforms = ["Instagram"]
-                                    ig_count += 1
-                                else:
-                                    platforms = ["Facebook", "Instagram"]
-                                    fb_count += 1
-                                    ig_count += 1
-                            
-                            logger.info(f"       Post {i}:")
-                            logger.info(f"         - Type: {post_type}")
-                            logger.info(f"         - Platforms: {', '.join(platforms)}")
-                            logger.info(f"         - Status: {post.get('status', 'draft')}")
-                            
-                            media = post.get("media", [])
-                            if media:
-                                logger.info(f"         - Media: {len(media)} items")
-                        
-                        # Summary for this ad set
-                        logger.info(f"     📊 Generation Summary:")
-                        logger.info(f"       - Facebook posts: {fb_count}")
-                        logger.info(f"       - Instagram posts: {ig_count}")
-                        logger.info(f"       - Post types: {post_types}")
-                        
-                        # Show remaining capacity
-                        if self.generation_state:
-                            ad_set_state = self.generation_state.get_ad_set_state(ad_set_id)
-                            if ad_set_state:
-                                remaining = ad_set_state.get_remaining_capacity()
-                                logger.info(f"     📦 Remaining Capacity:")
-                                logger.info(f"       - FB posts: {remaining.get('facebook_posts', 0)}")
-                                logger.info(f"       - IG posts: {remaining.get('instagram_posts', 0)}")
-                                logger.info(f"       - Photos: {remaining.get('photos', 0)}")
-                                logger.info(f"       - Videos: {remaining.get('videos', 0)}")
-                        
-                        all_posts.extend(posts)
-                    
-                        # Save posts
-                        await self._save_posts_to_db(posts, ad_set_id, campaign.get("id"))
-                    else:
+                    if not posts:
                         logger.warning(f"     ⚠️ No posts generated")
+                        continue
+                    
+                    logger.info(f"     ✅ Generated {len(posts)} posts from LLM")
+                    
+                    # Save draft posts to database
+                    await self._save_posts_to_db(posts, ad_set_id, campaign.get("id"))
+                    logger.info(f"     💾 Saved {len(posts)} draft posts to database")
+                    
+                    # CRITICAL: Update posting service state for this ad set
+                    ad_set_state = self.generation_state.get_ad_set_state(ad_set_id)
+                    posting_service.state = ad_set_state
+                    
+                    # DETERMINISTIC EXECUTION - Post to platforms
+                    logger.info(f"     📤 Starting deterministic posting...")
+                    posting_results = await posting_service.execute_batch(
+                        posts=posts,
+                        ad_set_id=ad_set_id,
+                        placements=ad_set.get("placements", [])
+                    )
+                    
+                    # Update database with platform IDs for successful posts
+                    for result in posting_results:
+                        if result.success:
+                            await self._update_post_with_platform_data(
+                                post_id=result.post_id,
+                                platform=result.platform,
+                                platform_post_id=result.platform_post_id,
+                                platform_url=result.platform_url
+                            )
+                    
+                    # Track results
+                    successful_posts = [r for r in posting_results if r.success]
+                    failed_posts = [r for r in posting_results if not r.success]
+                    
+                    logger.info(f"     📊 Posting complete:")
+                    logger.info(f"        - Successful: {len(successful_posts)}")
+                    logger.info(f"        - Failed: {len(failed_posts)}")
+                    
+                    all_posts.extend(posts)
+                    all_results.extend(posting_results)
+                    
+                    if failed_posts:
+                        for failed in failed_posts:
+                            all_errors.append(f"{failed.post_id}: {failed.error_message}")
+                    
+                    # Show remaining capacity after posting
+                    if self.generation_state:
+                        ad_set_state = self.generation_state.get_ad_set_state(ad_set_id)
+                        if ad_set_state:
+                            remaining = ad_set_state.get_remaining_capacity()
+                            logger.info(f"     📦 Remaining Capacity:")
+                            logger.info(f"       - FB posts: {remaining.get('facebook_posts', 0)}")
+                            logger.info(f"       - IG posts: {remaining.get('instagram_posts', 0)}")
+                            logger.info(f"       - Photos: {remaining.get('photos', 0)}")
+                            logger.info(f"       - Videos: {remaining.get('videos', 0)}")
                     
                 except Exception as e:
                     error_msg = f"Failed for ad set {ad_set_name}: {str(e)}"
@@ -306,48 +288,76 @@ class ContentCreatorAgent(BaseAgent):
                     logger.error(f"     ❌ {error_msg}")
         
         # Final summary
+        successful_results = [r for r in all_results if r.success]
+        failed_results = [r for r in all_results if not r.success]
+        
         logger.info("\n" + "=" * 70)
-        logger.info("CONTENT CREATION COMPLETED")
+        logger.info("CONTENT CREATION AND POSTING COMPLETED")
         logger.info("=" * 70)
         logger.info(f"📊 Final Results:")
-        logger.info(f"  - Total posts created: {len(all_posts)}")
+        logger.info(f"  - Total posts generated: {len(all_posts)}")
+        logger.info(f"  - Total posting attempts: {len(all_results)}")
+        logger.info(f"  - Successfully posted: {len(successful_results)}")
+        logger.info(f"  - Failed to post: {len(failed_results)}")
         logger.info(f"  - Total errors: {len(all_errors)}")
         
         if all_errors:
             logger.error(f"  - Errors encountered:")
-            for err in all_errors[:5]:  # Show first 5 errors
+            for err in all_errors[:5]:
                 logger.error(f"    • {err}")
         
         logger.info("=" * 70)
         
         return {
             "posts_created": len(all_posts),
+            "posts_published": len(successful_results),
             "posts": all_posts,
+            "posting_results": [
+                {
+                    "post_id": r.post_id,
+                    "platform": r.platform,
+                    "success": r.success,
+                    "platform_post_id": r.platform_post_id,
+                    "platform_url": r.platform_url,
+                    "error": r.error_message
+                }
+                for r in all_results
+            ],
             "errors": all_errors,
             "generation_summary": self.generation_state.get_all_summaries() if self.generation_state else {}
         }
-    
-    def _get_or_create_tools(self, ad_set_id: str) -> Dict[str, Any]:
-        """Get or create tools with state validation"""
-        if ad_set_id not in self.tools_by_ad_set:
-            ad_set_state = None
-            if self.generation_state:
-                ad_set_state = self.generation_state.get_ad_set_state(ad_set_id)
-            
-            self.tools_by_ad_set[ad_set_id] = {
-                'facebook_text': FacebookTextLinkPostTool(state=ad_set_state),
-                'facebook_image': FacebookImagePostTool(state=ad_set_state),
-                'facebook_video': FacebookVideoPostTool(state=ad_set_state),
-                'instagram_image': InstagramImagePostTool(state=ad_set_state),
-                'instagram_reel': InstagramReelPostTool(state=ad_set_state)
+
+    async def _update_post_with_platform_data(
+        self,
+        post_id: str,
+        platform: str,
+        platform_post_id: str,
+        platform_url: str
+    ):
+        """Update post in database with platform-specific data"""
+        try:
+            update_data = {
+                "status": "published",
+                "is_published": True
             }
             
-            # Pass execution tracking
-            for tool in self.tools_by_ad_set[ad_set_id].values():
-                tool.execution_id = self.execution_id
-                tool.execution_step = self.execution_step
-        
-        return self.tools_by_ad_set[ad_set_id]
+            if platform == "facebook":
+                update_data["facebook_post_id"] = platform_post_id
+                update_data["facebook_url"] = platform_url
+            elif platform == "instagram":
+                update_data["instagram_post_id"] = platform_post_id
+                update_data["instagram_url"] = platform_url
+            
+            await self.db_client.update(
+                "posts",
+                post_id,
+                update_data
+            )
+            
+            logger.debug(f"Updated post {post_id} with {platform} data")
+            
+        except Exception as e:
+            logger.error(f"Failed to update post {post_id} with platform data: {e}")
     
     async def _gather_context(self, ad_set_id: str) -> Dict[str, Any]:
         """Gather context including remaining capacity"""
@@ -420,24 +430,6 @@ class ContentCreatorAgent(BaseAgent):
                 post["post_id"] = str(uuid.uuid4())
         
         return output
-    
-    async def _execute_content_batch(
-        self, batch: Dict[str, Any], ad_set_id: str, tools: Dict[str, Any]
-    ) -> tuple[List[Dict], List[str]]:
-        """Execute content creation with tools (simplified for now)"""
-        posts = []
-        errors = []
-        
-        for post in batch.get("posts", []):
-            try:
-                # For now, just add the post as-is
-                # In production, would route to appropriate tool based on post type
-                posts.append(post)
-                logger.info(f"    ✔ Created {post.get('post_type')} post: {post.get('post_id')}")
-            except Exception as e:
-                errors.append(str(e))
-        
-        return posts, errors
     
     async def _save_posts_to_db(self, posts: List[Dict], ad_set_id: str, campaign_id: str):
         """Save posts to database"""

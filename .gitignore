@@ -11,6 +11,9 @@ workflow-inspector/.env.local
 .env.local
 workflow-inspector/package-lock.json
 package-lock.json
+tests/test_token_diagnostics.py
+test_token_diagnostics.py
+tests/test_ig_short.py
 
 workflow-inspector/node_modules/
 node_modules/
